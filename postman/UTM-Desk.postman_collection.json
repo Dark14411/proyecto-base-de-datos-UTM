@@ -1,0 +1,73 @@
+{
+  "info": {
+    "name": "UTM Desk - API completa",
+    "description": "Pruebas CRUD y casos de uso de la API de incidencias. Ejecutar en orden para que incidenceId se actualice automáticamente.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" },
+    { "key": "incidenceId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Salud del servicio",
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/health" }
+    },
+    {
+      "name": "Incidencias",
+      "item": [
+        {
+          "name": "Crear incidencia",
+          "event": [{ "listen": "test", "script": { "exec": ["const json = pm.response.json();", "if (json.incidencia?._id) pm.collectionVariables.set('incidenceId', json.incidencia._id);", "pm.test('creada', () => pm.expect(pm.response.code).to.eql(201));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"titulo\": \"Prueba Postman de conectividad\",\n  \"descripcion\": \"Incidencia creada para validar el flujo completo de la API.\",\n  \"categoria\": \"computo_redes\",\n  \"prioridad\": \"media\",\n  \"reportante\": { \"nombre\": \"Usuario Postman\", \"rol\": \"Tester\", \"correo\": \"tester@utm.mx\" },\n  \"ubicacion\": { \"edificio\": \"Edificio A\", \"aula_espacio\": \"Laboratorio Postman\" },\n  \"tags\": [\"postman\", \"prueba\"],\n  \"detalle_especifico\": { \"direccion_ip\": \"10.0.0.10\", \"vlan\": \"VLAN-100\", \"puerto_uplink\": \"Gi1/0/1\", \"equipos_afectados\": 2 }\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/api/incidencias"
+          }
+        },
+        { "name": "Listar incidencias", "request": { "method": "GET", "url": "{{baseUrl}}/api/incidencias" } },
+        { "name": "Buscar incidencias", "request": { "method": "GET", "url": "{{baseUrl}}/api/incidencias/buscar?q=red" } },
+        { "name": "Obtener por ID", "request": { "method": "GET", "url": "{{baseUrl}}/api/incidencias/{{incidenceId}}" } },
+        {
+          "name": "Actualizar incidencia (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"titulo\": \"Incidencia actualizada desde Postman\",\n  \"descripcion\": \"Descripción actualizada y validada durante la prueba de integración.\",\n  \"prioridad\": \"alta\",\n  \"reportante\": { \"nombre\": \"Usuario Postman\", \"rol\": \"Tester\", \"correo\": \"tester@utm.mx\" },\n  \"ubicacion\": { \"edificio\": \"Edificio A\", \"aula_espacio\": \"Laboratorio Postman\" }\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/api/incidencias/{{incidenceId}}"
+          }
+        },
+        {
+          "name": "Agregar seguimiento",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"estado\": \"en proceso\", \"horas_invertidas\": 1.5, \"comentario\": \"Revisión técnica iniciada desde Postman.\", \"autor\": \"Técnico de pruebas\" }", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/api/incidencias/{{incidenceId}}/seguimiento"
+          }
+        },
+        {
+          "name": "Gestionar tag",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"accion\": \"agregar\", \"tag\": \"verificado\" }", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/api/incidencias/{{incidenceId}}/tags"
+          }
+        },
+        {
+          "name": "Agregar evidencia simulada",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"nombre_archivo\": \"captura-postman.png\", \"tipo_mime\": \"image/png\", \"peso_kb\": 128 }", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/api/incidencias/{{incidenceId}}/evidencias"
+          }
+        },
+        { "name": "Analítica", "request": { "method": "GET", "url": "{{baseUrl}}/api/incidencias/analitica" } },
+        { "name": "Eliminar incidencia", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/incidencias/{{incidenceId}}" } }
+      ]
+    }
+  ]
+}
