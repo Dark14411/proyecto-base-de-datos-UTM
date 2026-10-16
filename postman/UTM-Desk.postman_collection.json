@@ -66,6 +66,19 @@
           }
         },
         { "name": "Analítica", "request": { "method": "GET", "url": "{{baseUrl}}/api/incidencias/analitica" } },
+        {
+          "name": "Error de validación (400 Bad Request)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Inv\",\n  \"categoria\": \"invalida\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/incidencias"
+          }
+        },
         { "name": "Eliminar incidencia", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/incidencias/{{incidenceId}}" } }
       ]
     }

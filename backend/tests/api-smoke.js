@@ -75,6 +75,14 @@ async function main() {
   const analytics = await request("/api/incidencias/analitica");
   assert.ok(Array.isArray(analytics.distribucion_estado));
 
+  // Validación de error 400 Bad Request requerido por rúbrica
+  const badResponse = await fetch(`${baseUrl}/api/incidencias`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ titulo: "Inv", categoria: "invalida" }),
+  });
+  assert.equal(badResponse.status, 400, "Se esperaba status 400 por fallo de $jsonSchema");
+
   await request(`/api/incidencias/${incidenceId}`, { method: "DELETE" });
   console.log("API smoke test: OK");
 }

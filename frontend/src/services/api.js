@@ -11,10 +11,6 @@ const api = axios.create({
 // Servicios de Incidencias
 // ═══════════════════════════════════════════════════════════════
 
-// Health Check
-export const checkHealth = () =>
-  api.get('/health');
-
 // CU-01: Crear incidencia
 export const crearIncidencia = (data) =>
   api.post('/incidencias', data);
