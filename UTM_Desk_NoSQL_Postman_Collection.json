@@ -1,0 +1,247 @@
+{
+  "info": {
+    "_postman_id": "c1f2e3d4-utm-5000-nosql-2026-equipo5",
+    "name": "UTM Desk NoSQL Cloud — Colección de Pruebas API REST",
+    "description": "Colección oficial de pruebas para el Sistema Integral de Gestión, Resolución y Analítica de Incidencias en el Campus (UTM Equipo 5). Valida los requisitos funcionales RF-01 a RF-10 y RNF-05.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "token_admin",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token_coordinador",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token_tecnico",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token_reportante",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "incidencia_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Verificación de Salud API",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/salud",
+          "host": ["{{baseUrl}}"],
+          "path": ["salud"]
+        },
+        "description": "Verifica que el servidor backend Express esté activo y respondiendo."
+      }
+    },
+    {
+      "name": "2. Autenticación — Login Admin (RF-10)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const res = pm.response.json();",
+              "if (res.datos && res.datos.token) {",
+              "    pm.collectionVariables.set('token_admin', res.datos.token);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"correo\": \"admin@utm.mx\",\n  \"password\": \"admin123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "3. Autenticación — Login Coordinador (RF-10)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const res = pm.response.json();",
+              "if (res.datos && res.datos.token) {",
+              "    pm.collectionVariables.set('token_coordinador', res.datos.token);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"correo\": \"coordinador@utm.mx\",\n  \"password\": \"coord123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "4. Registro Polimórfico Cómputo (RF-01 - 201 Created)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const res = pm.response.json();",
+              "if (res.datos && res.datos._id) {",
+              "    pm.collectionVariables.set('incidencia_id', res.datos._id);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token_admin}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"titulo\": \"Falla en switch de borde laboratorio K4\",\n  \"descripcion\": \"Puertos del 1 al 12 sin enlace de red ethernet.\",\n  \"categoria\": \"computo_redes\",\n  \"prioridad\": \"alta\",\n  \"ubicacion\": {\n    \"edificio\": \"Edificio K\",\n    \"aula_espacio\": \"Laboratorio 4\"\n  },\n  \"detalle_especifico\": {\n    \"direccion_ip\": \"192.168.20.15\",\n    \"vlan\": \"VLAN-20-LABS\",\n    \"puerto_uplink\": \"Gi0/24\",\n    \"equipos_afectados\": 12\n  },\n  \"tags\": [\"switch\", \"cisco\", \"redes\"]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/incidencias",
+          "host": ["{{baseUrl}}"],
+          "path": ["incidencias"]
+        }
+      }
+    },
+    {
+      "name": "5. Prueba Negativa: Error de Validación (RF-01 - 400 Bad Request)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token_admin}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"titulo\": \"Incompleta\",\n  \"categoria\": \"categoria_invalida\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/incidencias",
+          "host": ["{{baseUrl}}"],
+          "path": ["incidencias"]
+        },
+        "description": "Demuestra la respuesta 400 ante campos faltantes o categoría no permitida por $jsonSchema."
+      }
+    },
+    {
+      "name": "6. Consultar Incidencias con Filtros (RF-08 - 200 OK)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token_coordinador}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/incidencias?categoria=computo_redes&limite=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["incidencias"],
+          "query": [
+            { "key": "categoria", "value": "computo_redes" },
+            { "key": "limite", "value": "10" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "7. Asignación de Técnico (RF-09 - 200 OK)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token_coordinador}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre_tecnico\": \"Téc. Mario Chan\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/incidencias/{{incidencia_id}}/tecnico",
+          "host": ["{{baseUrl}}"],
+          "path": ["incidencias", "{{incidencia_id}}", "tecnico"]
+        }
+      }
+    },
+    {
+      "name": "8. Actualización Atómica de Estado ($set + $inc + $push) (RF-03 - 200 OK)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token_coordinador}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"estado\": \"resuelta\",\n  \"descripcion\": \"Reemplazo de módulo SFP y reactivación de puertos.\",\n  \"horas\": 2.5\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/incidencias/{{incidencia_id}}/estado",
+          "host": ["{{baseUrl}}"],
+          "path": ["incidencias", "{{incidencia_id}}", "estado"]
+        }
+      }
+    },
+    {
+      "name": "9. Búsqueda Textual Ponderada ($text en español) (RF-05 - 200 OK)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token_coordinador}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/incidencias/buscar?q=switch",
+          "host": ["{{baseUrl}}"],
+          "path": ["incidencias", "buscar"],
+          "query": [{ "key": "q", "value": "switch" }]
+        }
+      }
+    },
+    {
+      "name": "10. Analítica Directiva: Pipeline 1 y 2 (RF-06 - 200 OK)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token_coordinador}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/incidencias/analitica",
+          "host": ["{{baseUrl}}"],
+          "path": ["incidencias", "analitica"]
+        }
+      }
+    }
+  ]
+}
