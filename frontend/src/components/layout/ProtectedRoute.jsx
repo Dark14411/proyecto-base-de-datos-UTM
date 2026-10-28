@@ -20,8 +20,12 @@ const ProtectedRoute = ({ children, rolesPermitidos }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (rolesPermitidos && !rolesPermitidos.includes(usuario.rol)) {
-    return <Navigate to="/dashboard" replace />;
+  if (rolesPermitidos) {
+    const rolUsuario = (usuario?.rol || usuario?.rol_sistema || '').toLowerCase();
+    const permitidos = rolesPermitidos.map((r) => r.toLowerCase());
+    if (!permitidos.includes(rolUsuario)) {
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   return children;

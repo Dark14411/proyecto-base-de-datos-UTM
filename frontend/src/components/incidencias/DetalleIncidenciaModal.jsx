@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════
 // components/incidencias/DetalleIncidenciaModal.jsx
-// Vista de detalle completa con historial, evidencias y acciones RBAC
-// Compatible al 100% con Figuras 2, 4, 5 y 6
+// Vista de detalle de incidencia con gestión unificada, detalle técnico,
+// asignación de especialista, evidencias e historial cronológico.
 // ═══════════════════════════════════════════════════════════════
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
 import {
@@ -18,481 +18,775 @@ import {
   UserCheck,
   Send,
   Plus,
-  Trash2,
-  Cpu,
-  Wrench,
+  Monitor,
+  Building,
   GraduationCap,
+  AlertCircle,
+  CheckCircle2,
+  FileText,
+  ShieldCheck,
 } from 'lucide-react';
 
+// ─── Catálogos de presentación ─────────────────────────────────
+const ESTADOS = {
+  abierta: { label: 'Abierta', clase: 'campus-badge--abierta', dot: 'bg-amber-500' },
+  en_proceso: { label: 'En proceso', clase: 'campus-badge--proceso', dot: 'bg-blue-500' },
+  en_espera: { label: 'En espera', clase: 'campus-badge--espera', dot: 'bg-gray-400' },
+  resuelta: { label: 'Resuelta', clase: 'campus-badge--resuelta', dot: 'bg-emerald-500' },
+  cerrada: { label: 'Cerrada', clase: 'campus-badge--cerrada', dot: 'bg-gray-500' },
+};
+
+const PRIORIDADES = {
+  baja: 'badge--secondary',
+  media: 'badge--info',
+  alta: 'badge--warning',
+  critica: 'badge--danger',
+};
+
+const CATEGORIAS = {
+  computo_redes: 'Cómputo y redes',
+  infraestructura: 'Infraestructura',
+  academico: 'Servicios académicos',
+};
+
+const formatearFecha = (valor, conHora = true) => {
+  if (!valor) return '—';
+  const opciones = { year: 'numeric', month: 'short', day: 'numeric' };
+  if (conHora) Object.assign(opciones, { hour: '2-digit', minute: '2-digit' });
+  return new Date(valor).toLocaleString('es-MX', opciones);
+};
+
+const etiquetaLegible = (valor) =>
+  typeof valor === 'string' ? valor.replace(/_/g, ' ') : valor;
+
+const formatearNumeroReporte = (codigo) => {
+  if (!codigo || typeof codigo !== 'string') return 'Reporte registrado';
+  const partes = codigo.split('-');
+  const num = partes[partes.length - 1];
+  return num ? `Reporte #${num}` : 'Reporte registrado';
+};
+
+// ─── Sub-componentes de presentación ───────────────────────────
+const Seccion = ({ icono: Icono, titulo, accion, children }) => (
+  <section className="pt-5 mt-5 border-t border-[var(--color-border-subtle)] first:mt-0 first:pt-0 first:border-t-0">
+    <div className="flex items-center justify-between gap-3 mb-3">
+      <h3 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
+        <Icono size={14} /> {titulo}
+      </h3>
+      {accion}
+    </div>
+    {children}
+  </section>
+);
+
+const InfoCard = ({ icono: Icono, tono, titulo, children }) => (
+  <div className="flex items-start gap-3 p-3.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]">
+    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${tono}`}>
+      <Icono size={17} />
+    </div>
+    <div className="min-w-0 flex-1">
+      <span className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-0.5">
+        {titulo}
+      </span>
+      {children}
+    </div>
+  </div>
+);
+
+const Dato = ({ etiqueta, valor }) => {
+  if (valor === undefined || valor === null || valor === '') return null;
+  return (
+    <div className="min-w-0">
+      <span className="block text-[11px] text-[var(--color-text-muted)] mb-0.5">{etiqueta}</span>
+      <strong className="block text-[13px] font-semibold text-[var(--color-text)] capitalize break-words">
+        {valor}
+      </strong>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════
 const DetalleIncidenciaModal = ({ incidencia: incInicial, onClose, onUpdated }) => {
-  const { usuario, tieneRol } = useAuth();
+  const { usuario } = useAuth();
   const [inc, setInc] = useState(incInicial);
-  const [nuevoEstado, setNuevoEstado] = useState('');
-  const [horasInput, setHorasInput] = useState(0);
-  const [nota, setNota] = useState('');
+  const [nuevoEstado, setNuevoEstado] = useState(incInicial?.estado || 'en_proceso');
+  const [horasInput, setHorasInput] = useState('');
+  const [notaSeguimiento, setNotaSeguimiento] = useState('');
   const [tecnicos, setTecnicos] = useState([]);
   const [tecnicoId, setTecnicoId] = useState('');
   const [nuevoTag, setNuevoTag] = useState('');
   const [cargando, setCargando] = useState(false);
+  const [aviso, setAviso] = useState(null);
+
+  const rolActual = (usuario?.rol || usuario?.rol_sistema || '').toLowerCase();
+  const esDirectivo = rolActual === 'directivo';
+  const esCoordinador = rolActual === 'coordinador';
+  const esTecnico = rolActual === 'tecnico';
+  const esReportante = rolActual === 'reportante';
+
+  const puedeEditarSeguimiento = !esDirectivo && (esTecnico || esCoordinador);
+  const puedeAsignarTecnico = !esDirectivo && esCoordinador;
+  const puedeGestionarTags = !esDirectivo && (esTecnico || esCoordinador);
+  const puedeSubirEvidencia =
+    !esDirectivo &&
+    (esTecnico ||
+      esCoordinador ||
+      (esReportante && inc.reportante?.correo?.toLowerCase() === usuario?.correo?.toLowerCase()));
+
+  const cargarDetalle = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/incidencias/${incInicial._id}`);
+      if (data.datos) {
+        setInc(data.datos);
+        setNuevoEstado(data.datos.estado || 'en_proceso');
+      }
+    } catch (e) {
+      setAviso({ tipo: 'error', texto: e.response?.data?.mensaje || 'No se pudo cargar el detalle.' });
+    }
+  }, [incInicial._id]);
 
   useEffect(() => {
     cargarDetalle();
-    if (tieneRol('coordinador', 'administrador')) {
-      api.get('/usuarios/tecnicos')
+    if (puedeAsignarTecnico) {
+      api
+        .get('/usuarios/tecnicos')
         .then(({ data }) => setTecnicos(data.datos || []))
-        .catch(() => {});
+        .catch(() => setTecnicos([]));
     }
-  }, []);
+  }, [cargarDetalle, puedeAsignarTecnico]);
 
-  const cargarDetalle = async () => {
-    try {
-      const { data } = await api.get(`/incidencias/${inc._id}`);
-      setInc(data.datos);
-    } catch (e) {
-      console.error('Error cargando detalle:', e);
-    }
-  };
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
-  const cambiarEstado = async () => {
-    if (!nuevoEstado) return;
+  const ejecutar = async (accion, mensajeOk) => {
     try {
       setCargando(true);
-      await api.patch(`/incidencias/${inc._id}/estado`, {
-        estado: nuevoEstado,
-        descripcion: `Estado actualizado a ${nuevoEstado}`,
-        horas: Number(horasInput) || 0,
-      });
+      setAviso(null);
+      await accion();
       await cargarDetalle();
-      setNuevoEstado('');
-      setHorasInput(0);
-      onUpdated();
+      onUpdated?.();
+      window.dispatchEvent(new CustomEvent('incidencias-updated'));
+      if (mensajeOk) setAviso({ tipo: 'ok', texto: mensajeOk });
+      return true;
     } catch (error) {
-      alert(error.response?.data?.mensaje || 'Error al cambiar estado.');
+      const d = error.response?.data;
+      setAviso({
+        tipo: 'error',
+        texto: d?.mensaje || d?.errores?.[0]?.mensaje || 'Ocurrió un error al procesar la solicitud.',
+      });
+      return false;
     } finally {
       setCargando(false);
     }
   };
 
-  const asignarTecnicoAction = async () => {
-    if (!tecnicoId) return;
-    try {
-      setCargando(true);
-      const tecSeleccionado = tecnicos.find(t => t._id === tecnicoId);
-      await api.patch(`/incidencias/${inc._id}/tecnico`, {
-        tecnico_id: tecnicoId,
-        nombre_tecnico: tecSeleccionado ? (tecSeleccionado.nombre || tecSeleccionado.nombre_completo) : '',
-      });
-      await cargarDetalle();
-      setTecnicoId('');
-      onUpdated();
-    } catch (error) {
-      alert(error.response?.data?.mensaje || 'Error al asignar técnico.');
-    } finally {
-      setCargando(false);
-    }
-  };
-
-  const agregarNota = async (e) => {
+  // Guardar seguimiento unificado (Estado + Horas + Nota)
+  const handleGuardarSeguimiento = async (e) => {
     e.preventDefault();
-    if (!nota.trim()) return;
-    try {
-      await api.post(`/incidencias/${inc._id}/notas`, {
-        descripcion: nota.trim(),
-        horas: Number(horasInput) || 0,
-        estado: inc.estado,
+    const estadoAEnviar = nuevoEstado || inc.estado || 'en_proceso';
+    const horasNum = Number(horasInput) || 0;
+    const textoNota = notaSeguimiento.trim();
+
+    if (estadoAEnviar === inc.estado && horasNum <= 0 && !textoNota) {
+      setAviso({
+        tipo: 'error',
+        texto: 'Selecciona un nuevo estado, ingresa horas dedicadas o escribe una nota de seguimiento.',
       });
-      await cargarDetalle();
-      setNota('');
-      setHorasInput(0);
-      onUpdated();
-    } catch (error) {
-      alert(error.response?.data?.mensaje || 'Error al agregar nota.');
-    }
-  };
-
-  const agregarEtiqueta = async (e) => {
-    e.preventDefault();
-    if (!nuevoTag.trim()) return;
-    try {
-      await api.patch(`/incidencias/${inc._id}/tags`, { tags: [nuevoTag.trim().toLowerCase()] });
-      await cargarDetalle();
-      setNuevoTag('');
-      onUpdated();
-    } catch (error) {
-      alert('Error al agregar tag.');
-    }
-  };
-
-  const eliminarEtiqueta = async (tag) => {
-    try {
-      await api.patch(`/incidencias/${inc._id}/tags/eliminar`, { tag });
-      await cargarDetalle();
-      onUpdated();
-    } catch (error) {
-      alert('Error al eliminar tag.');
-    }
-  };
-
-  const subirArchivo = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      alert('El archivo no debe exceder los 5 MB (RNF-02).');
       return;
     }
 
+    const comentarioFinal =
+      textoNota ||
+      `Actualización de estado a ${ESTADOS[estadoAEnviar]?.label || estadoAEnviar}${
+        horasNum > 0 ? ` (+${horasNum} h)` : ''
+      }`;
+
+    const payload = {
+      estado: estadoAEnviar,
+      horas: horasNum,
+      horas_invertidas: horasNum,
+      comentario: comentarioFinal,
+      descripcion: comentarioFinal,
+    };
+
+    const ok = await ejecutar(
+      () => api.patch(`/incidencias/${inc._id}/estado`, payload),
+      'Seguimiento guardado correctamente.'
+    );
+
+    if (ok) {
+      setHorasInput('');
+      setNotaSeguimiento('');
+    }
+  };
+
+  // Asignar o reasignar técnico
+  const handleAsignarTecnico = async (idSeleccionado) => {
+    if (!idSeleccionado) return;
+    const tec = tecnicos.find((t) => t._id === idSeleccionado);
+    const ok = await ejecutar(
+      () =>
+        api.patch(`/incidencias/${inc._id}/tecnico`, {
+          tecnico_id: idSeleccionado,
+          nombre_tecnico: tec ? tec.nombre || tec.nombre_completo : '',
+        }),
+      'Técnico asignado correctamente.'
+    );
+    if (ok) setTecnicoId('');
+  };
+
+  // Gestión de etiquetas
+  const agregarEtiqueta = async (e) => {
+    e.preventDefault();
+    const tag = nuevoTag.trim().toLowerCase().replace(/^#+/, '');
+    if (!tag) return;
+    if (inc.tags?.includes(tag)) {
+      setAviso({ tipo: 'error', texto: `La etiqueta "${tag}" ya está registrada.` });
+      return;
+    }
+    const ok = await ejecutar(() => api.patch(`/incidencias/${inc._id}/tags`, { tags: [tag] }));
+    if (ok) setNuevoTag('');
+  };
+
+  const eliminarEtiqueta = (tag) =>
+    ejecutar(() => api.patch(`/incidencias/${inc._id}/tags/eliminar`, { tag }));
+
+  // Subir evidencia
+  const subirArchivo = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setAviso({ tipo: 'error', texto: 'El archivo supera el límite de 5 MB.' });
+      return;
+    }
     const formData = new FormData();
     formData.append('archivo', file);
-
-    try {
-      setCargando(true);
-      await api.post(`/incidencias/${inc._id}/evidencias`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      await cargarDetalle();
-      onUpdated();
-    } catch (error) {
-      alert(error.response?.data?.mensaje || 'Error al subir evidencia.');
-    } finally {
-      setCargando(false);
-    }
-  };
-
-  const estadoColor = {
-    abierta: 'badge--danger',
-    en_proceso: 'badge--warning',
-    en_progreso: 'badge--warning',
-    en_espera: 'badge--info',
-    resuelta: 'badge--success',
-    cerrada: 'badge--secondary',
-  };
-
-  const renderDetalleEspecifico = () => {
-    const d = inc.detalle_especifico || {};
-    if (inc.categoria === 'computo_redes') {
-      return (
-        <div className="card bg-slate-900/50 p-3 rounded-lg border border-indigo-500/20 my-3">
-          <h4 className="text-sm font-semibold text-indigo-400 flex items-center gap-1.5 mb-2">
-            <Cpu size={16} /> Parámetros de Red y Cómputo
-          </h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-            <div><span className="text-slate-400 block">Dirección IP:</span> <strong className="text-slate-200">{d.direccion_ip || 'N/A'}</strong></div>
-            <div><span className="text-slate-400 block">VLAN:</span> <strong className="text-slate-200">{d.vlan || 'N/A'}</strong></div>
-            <div><span className="text-slate-400 block">Puerto Uplink:</span> <strong className="text-slate-200">{d.puerto_uplink || 'N/A'}</strong></div>
-            <div><span className="text-slate-400 block">Equipos afectados:</span> <strong className="text-slate-200">{d.equipos_afectados ?? 0}</strong></div>
-          </div>
-        </div>
-      );
-    }
-    if (inc.categoria === 'infraestructura') {
-      return (
-        <div className="card bg-slate-900/50 p-3 rounded-lg border border-amber-500/20 my-3">
-          <h4 className="text-sm font-semibold text-amber-400 flex items-center gap-1.5 mb-2">
-            <Wrench size={16} /> Parámetros de Infraestructura Física
-          </h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-            <div><span className="text-slate-400 block">Tipo de Daño:</span> <strong className="text-slate-200">{d.tipo_dano || 'N/A'}</strong></div>
-            <div><span className="text-slate-400 block">Nivel de Riesgo:</span> <strong className="text-slate-200 uppercase">{d.nivel_riesgo || 'medio'}</strong></div>
-            <div><span className="text-slate-400 block">Contratista:</span> <strong className="text-slate-200">{d.requiere_contratista ? 'Sí requiere' : 'No requiere'}</strong></div>
-            <div><span className="text-slate-400 block">Insumos:</span> <strong className="text-slate-200">{Array.isArray(d.insumos_requeridos) ? d.insumos_requeridos.join(', ') : d.insumos_requeridos}</strong></div>
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div className="card bg-slate-900/50 p-3 rounded-lg border border-emerald-500/20 my-3">
-        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-1.5 mb-2">
-          <GraduationCap size={16} /> Parámetros de Sistemas Académicos
-        </h4>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-          <div><span className="text-slate-400 block">Plataforma:</span> <strong className="text-slate-200">{d.plataforma || 'N/A'}</strong></div>
-          <div><span className="text-slate-400 block">Código Curso:</span> <strong className="text-slate-200">{d.codigo_curso || 'N/A'}</strong></div>
-          <div><span className="text-slate-400 block">Periodo Escolar:</span> <strong className="text-slate-200">{d.periodo_escolar || d.periodo_academico || 'N/A'}</strong></div>
-          <div><span className="text-slate-400 block">Estudiantes:</span> <strong className="text-slate-200">{d.estudiantes_afectados ?? d.alumnos_afectados ?? 0}</strong></div>
-        </div>
-      </div>
+    await ejecutar(
+      () =>
+        api.post(`/incidencias/${inc._id}/evidencias`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        }),
+      'Evidencia adjuntada correctamente.'
     );
   };
 
-  const nombreReportante = inc.reportante?.nombre || inc.reportante?.nombre_completo || 'Usuario';
-  const nombreTecnico = typeof inc.tecnico_asignado === 'string'
-    ? inc.tecnico_asignado
-    : (inc.tecnico_asignado?.nombre || inc.tecnico_asignado?.nombre_completo || 'Sin asignar');
+  // ─── Detalle Técnico Específico según categoría ──────────────
+  const renderDetalleEspecifico = () => {
+    const d = inc.detalle_especifico || {};
+
+    if (inc.categoria === 'computo_redes') {
+      return (
+        <div className="mt-4 p-4 rounded-xl border bg-emerald-50/70 border-emerald-200 text-emerald-900 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-200">
+          <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider mb-3 text-emerald-800 dark:text-emerald-300">
+            <Monitor size={15} /> Especificaciones de Cómputo y Redes
+          </h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <Dato etiqueta="Dirección IP" valor={d.direccion_ip} />
+            <Dato etiqueta="Red / VLAN" valor={d.vlan} />
+            <Dato etiqueta="Puerto de conexión" valor={d.puerto_uplink} />
+            <Dato
+              etiqueta="Equipos afectados"
+              valor={d.equipos_afectados !== undefined && d.equipos_afectados !== null ? `${d.equipos_afectados} equipo(s)` : null}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (inc.categoria === 'infraestructura') {
+      const insumos = Array.isArray(d.insumos_requeridos)
+        ? d.insumos_requeridos.filter(Boolean)
+        : d.insumos_requeridos
+        ? [d.insumos_requeridos]
+        : [];
+
+      return (
+        <div className="mt-4 p-4 rounded-xl border bg-amber-50/70 border-amber-200 text-amber-900 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-200">
+          <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider mb-3 text-amber-800 dark:text-amber-300">
+            <Building size={15} /> Especificaciones de Infraestructura y Mantenimiento
+          </h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <Dato etiqueta="Tipo de desperfecto" valor={etiquetaLegible(d.tipo_dano)} />
+            <Dato etiqueta="Nivel de riesgo" valor={d.nivel_riesgo || d.riesgo_seguridad} />
+            <Dato
+              etiqueta="Apoyo externo / Contratista"
+              valor={d.requiere_contratista !== undefined && d.requiere_contratista !== null ? (d.requiere_contratista ? 'Sí requiere' : 'No requiere') : null}
+            />
+            {insumos.length > 0 && (
+              <div className="min-w-0">
+                <span className="block text-[11px] text-[var(--color-text-muted)] mb-1">
+                  Materiales e insumos
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {insumos.map((ins, idx) => (
+                    <span key={idx} className="badge badge--secondary text-[11px] py-0.5 px-2 capitalize">
+                      {etiquetaLegible(ins)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (inc.categoria === 'academico') {
+      const estAfectados = d.estudiantes_afectados ?? d.estudiantes_impactados ?? d.alumnos_afectados;
+      return (
+        <div className="mt-4 p-4 rounded-xl border bg-blue-50/70 border-blue-200 text-blue-900 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-200">
+          <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider mb-3 text-blue-800 dark:text-blue-300">
+            <GraduationCap size={15} /> Especificaciones del Servicio Académico
+          </h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <Dato etiqueta="Plataforma o sistema" valor={d.plataforma} />
+            <Dato etiqueta="Clave de materia" valor={d.codigo_curso} />
+            <Dato etiqueta="Periodo escolar" valor={d.periodo_escolar || d.periodo_academico} />
+            <Dato
+              etiqueta="Estudiantes afectados"
+              valor={estAfectados !== undefined && estAfectados !== null ? `${estAfectados} alumno(s)` : null}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const estado = ESTADOS[inc.estado] || { label: inc.estado, clase: 'campus-badge--espera', dot: 'bg-gray-400' };
+  const nombreReportante = inc.reportante?.nombre || inc.reportante?.nombre_completo || 'Usuario del campus';
+  const nombreTecnico =
+    typeof inc.tecnico_asignado === 'string' && inc.tecnico_asignado
+      ? inc.tecnico_asignado
+      : inc.tecnico_asignado?.nombre || inc.tecnico_asignado?.nombre_completo || null;
+  const evidencias = inc.evidencias_adjuntas || [];
+  const historial = [...(inc.historial_seguimiento || [])].sort(
+    (a, b) => new Date(b.fecha) - new Date(a.fecha)
+  );
+
+  const tieneResolucion = Boolean(inc.fecha_resolucion || inc.estado === 'resuelta' || inc.estado === 'cerrada');
+
+  const tecnicosEspecialistas = tecnicos.filter((t) => {
+    const esp = t.perfil_operativo?.especialidades?.length
+      ? t.perfil_operativo.especialidades
+      : t.especialidades || [];
+    return esp.includes(inc.categoria);
+  });
+  const tecnicosOtros = tecnicos.filter((t) => !tecnicosEspecialistas.some((e) => e._id === t._id));
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
-        <div className="modal__header">
-          <div>
-            <code className="folio-badge folio-badge--lg">{inc.codigo_incidencia}</code>
-            <h2 className="modal__title">{inc.titulo}</h2>
+      <div
+        className="modal modal--lg"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="detalle-incidencia-titulo"
+      >
+        {/* ─── Header ─────────────────────────────────────────── */}
+        <div className="modal__header items-start gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-primary)] bg-[var(--color-primary-light)] border border-[var(--color-primary-border)] px-2.5 py-0.5 rounded-md">
+                {formatearNumeroReporte(inc.codigo_incidencia)} · {inc.ubicacion?.edificio || 'Campus'}
+              </span>
+              {esDirectivo && (
+                <span className="badge badge--warning text-[11px] font-semibold">
+                  Vista de supervisión (Solo lectura)
+                </span>
+              )}
+            </div>
+            <h2 id="detalle-incidencia-titulo" className="modal__title mt-2">
+              {inc.titulo}
+            </h2>
+            <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+              <span className={`campus-badge ${estado.clase}`}>
+                <span className={`campus-badge__dot ${estado.dot}`} />
+                {estado.label}
+              </span>
+              <span className={`badge ${PRIORIDADES[inc.prioridad] || 'badge--secondary'} capitalize`}>
+                Prioridad {inc.prioridad}
+              </span>
+              <span className="badge badge--secondary">
+                {CATEGORIAS[inc.categoria] || etiquetaLegible(inc.categoria)}
+              </span>
+            </div>
           </div>
-          <button className="btn btn--ghost" onClick={onClose}>
+          <button className="modal-close shrink-0" onClick={onClose} aria-label="Cerrar modal">
             <X size={20} />
           </button>
         </div>
 
-        <div className="modal__body modal__body--scroll">
-          {/* Insignias de Estado y Prioridad */}
-          <div className="detail-badges">
-            <span className={`badge ${estadoColor[inc.estado] || 'badge--secondary'}`}>
-              {inc.estado?.replace('_', ' ').toUpperCase()}
-            </span>
-            <span className="badge badge--outline">Prioridad: {inc.prioridad?.toUpperCase()}</span>
-            <span className="badge badge--outline">Categoría: {inc.categoria?.replace(/_/g, ' ').toUpperCase()}</span>
-          </div>
-
-          {/* Descripción */}
-          <div className="detail-section">
-            <h3 className="detail-section__title">Descripción</h3>
-            <p className="detail-section__text">{inc.descripcion}</p>
-          </div>
-
-          {/* Detalle Polimórfico */}
-          {renderDetalleEspecifico()}
-
-          {/* Datos Operativos */}
-          <div className="detail-grid">
-            <div className="detail-item">
-              <User size={16} />
-              <div>
-                <strong>Reportante ({inc.reportante?.rol || 'Docente'})</strong>
-                <p>{nombreReportante}</p>
-                <small>{inc.reportante?.correo}</small>
-              </div>
+        {/* ─── Body ───────────────────────────────────────────── */}
+        <div className="modal__body">
+          {aviso && (
+            <div
+              className={`flex items-center gap-2 mb-4 px-3.5 py-2.5 rounded-lg text-xs font-medium border ${
+                aviso.tipo === 'ok'
+                  ? 'bg-[var(--color-success-bg)] text-[var(--color-success)] border-[var(--color-success)]/30'
+                  : 'bg-[var(--color-danger-bg)] text-[var(--color-danger)] border-[var(--color-danger)]/30'
+              }`}
+              role="status"
+            >
+              {aviso.tipo === 'ok' ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+              <span className="flex-1">{aviso.texto}</span>
+              <button type="button" onClick={() => setAviso(null)} aria-label="Cerrar aviso">
+                <X size={13} />
+              </button>
             </div>
-            <div className="detail-item">
-              <MapPin size={16} />
-              <div>
-                <strong>Ubicación Estandarizada</strong>
-                <p>{inc.ubicacion?.edificio}</p>
-                <small>{inc.ubicacion?.aula_espacio || inc.ubicacion?.aula_o_zona}</small>
-              </div>
+          )}
+
+          {/* Descripción y Detalle Técnico Específico */}
+          <Seccion icono={FileText} titulo="Descripción y Detalle Técnico Específico">
+            <div className="bg-[var(--color-bg)] p-4 rounded-xl border border-[var(--color-border)]">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] block mb-1">
+                Descripción del reporte
+              </span>
+              <p className="text-sm leading-relaxed text-[var(--color-text)]">
+                {inc.descripcion || 'Sin descripción detallada.'}
+              </p>
             </div>
-            <div className="detail-item">
-              <UserCheck size={16} />
-              <div>
-                <strong>Técnico Asignado</strong>
-                <p className={nombreTecnico === 'Sin asignar' ? 'text-amber-400' : 'text-emerald-400 font-semibold'}>
-                  {nombreTecnico}
+            {renderDetalleEspecifico()}
+          </Seccion>
+
+          {/* Información operativa */}
+          <Seccion icono={User} titulo="Información de Ubicación y Atención">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Reportante */}
+              <InfoCard
+                icono={User}
+                tono="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                titulo={`Reportado por · ${inc.reportante?.rol || 'Comunidad'}`}
+              >
+                <p className="text-sm font-semibold text-[var(--color-text)] truncate">
+                  {nombreReportante}
                 </p>
-              </div>
-            </div>
-            <div className="detail-item">
-              <Clock size={16} />
-              <div>
-                <strong>Tiempos de Atención</strong>
-                <p>{new Date(inc.fecha_creacion || inc.fecha_reporte || Date.now()).toLocaleString('es-MX')}</p>
-                <small className="text-indigo-300 font-medium">{inc.horas_invertidas || 0} hrs invertidas</small>
-              </div>
-            </div>
-          </div>
+                <p className="text-xs text-[var(--color-text-muted)] truncate">
+                  {inc.reportante?.correo || 'Sin correo registrado'}
+                </p>
+              </InfoCard>
 
-          {/* Acciones de Coordinador: Asignar Técnico (RF-09) */}
-          {tieneRol('coordinador', 'administrador') && (
-            <div className="card p-3 my-3 bg-indigo-950/20 border border-indigo-500/30 rounded-lg">
-              <h4 className="text-sm font-semibold text-indigo-300 mb-2 flex items-center gap-1.5">
-                <UserCheck size={16} /> Asignar / Reasignar Técnico (RF-09)
-              </h4>
-              <div className="flex gap-2">
-                <select
-                  className="form-select text-sm py-1"
-                  value={tecnicoId}
-                  onChange={(e) => setTecnicoId(e.target.value)}
-                >
-                  <option value="">Seleccionar técnico disponible...</option>
-                  {tecnicos.map((t) => (
-                    <option key={t._id} value={t._id}>
-                      {t.nombre || t.nombre_completo} ({t.especialidades?.join(', ') || 'General'})
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="btn btn--primary text-sm whitespace-nowrap"
-                  disabled={!tecnicoId || cargando}
-                  onClick={asignarTecnicoAction}
-                >
-                  Asignar
-                </button>
-              </div>
-            </div>
-          )}
+              {/* Ubicación */}
+              <InfoCard
+                icono={MapPin}
+                tono="bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+                titulo="Ubicación en el campus"
+              >
+                <p className="text-sm font-semibold text-[var(--color-text)]">
+                  {inc.ubicacion?.edificio || 'Campus'}
+                </p>
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  Espacio: <strong>{inc.ubicacion?.aula_espacio || inc.ubicacion?.aula_o_zona || 'Área general'}</strong>
+                </p>
+              </InfoCard>
 
-          {/* Acciones de Técnico/Coordinador: Actualizar Estado Atómico (RF-03) */}
-          {tieneRol('tecnico', 'coordinador', 'administrador') && (
-            <div className="card p-3 my-3 bg-slate-900/60 border border-slate-700 rounded-lg">
-              <h4 className="text-sm font-semibold text-slate-200 mb-2 flex items-center gap-1.5">
-                <Clock size={16} /> Actualización Atómica de Estado y Horas (RF-03)
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <select
-                  className="form-select text-sm py-1"
-                  value={nuevoEstado}
-                  onChange={(e) => setNuevoEstado(e.target.value)}
+              {/* Técnico asignado */}
+              <InfoCard
+                icono={UserCheck}
+                tono="bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                titulo="Responsable técnico asignado"
+              >
+                <p
+                  className={`text-sm font-semibold ${
+                    nombreTecnico ? 'text-[var(--color-text)]' : 'text-amber-600 dark:text-amber-400'
+                  }`}
                 >
-                  <option value="">Cambiar estado a...</option>
-                  <option value="abierta">Abierta</option>
-                  <option value="en_proceso">En Proceso</option>
-                  <option value="en_espera">En Espera</option>
-                  <option value="resuelta">Resuelta</option>
-                  <option value="cerrada">Cerrada</option>
-                </select>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  className="form-input text-sm py-1"
-                  placeholder="Horas dedicadas"
-                  value={horasInput || ''}
-                  onChange={(e) => setHorasInput(parseFloat(e.target.value) || 0)}
-                />
-                <button
-                  type="button"
-                  className="btn btn--secondary text-sm"
-                  disabled={!nuevoEstado || cargando}
-                  onClick={cambiarEstado}
-                >
-                  Actualizar ($set + $inc)
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Gestión de Etiquetas con $addToSet y $pull (RF-04) */}
-          <div className="detail-section">
-            <h3 className="detail-section__title flex items-center justify-between">
-              <span className="flex items-center gap-1.5"><Tag size={16} /> Etiquetas ($addToSet / $pull)</span>
-            </h3>
-            <div className="tags-list flex flex-wrap gap-1.5 mb-2">
-              {inc.tags?.map((tag, i) => (
-                <span key={i} className="badge badge--secondary flex items-center gap-1 text-xs">
-                  {tag}
-                  {tieneRol('tecnico', 'coordinador', 'administrador') && (
-                    <button
-                      type="button"
-                      className="hover:text-red-400 ml-1 text-slate-400"
-                      onClick={() => eliminarEtiqueta(tag)}
-                      title="Eliminar etiqueta"
+                  {nombreTecnico || 'Pendiente de asignación'}
+                </p>
+                {puedeAsignarTecnico && (
+                  <div className="mt-2">
+                    <select
+                      id="sel-tecnico-asignar"
+                      className="form-select text-xs py-1 px-2 w-full"
+                      value={tecnicoId}
+                      onChange={(e) => {
+                        setTecnicoId(e.target.value);
+                        handleAsignarTecnico(e.target.value);
+                      }}
+                      disabled={cargando}
                     >
-                      ×
-                    </button>
-                  )}
-                </span>
-              ))}
+                      <option value="">
+                        {nombreTecnico ? 'Cambiar técnico responsable...' : 'Seleccionar técnico especialista...'}
+                      </option>
+                      {tecnicosEspecialistas.length > 0 && (
+                        <optgroup label={`Especialistas en ${CATEGORIAS[inc.categoria] || 'esta área'}`}>
+                          {tecnicosEspecialistas.map((t) => (
+                            <option key={t._id} value={t._id}>
+                              {t.nombre || t.nombre_completo} · {t.perfil_operativo?.departamento || 'Soporte'}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {tecnicosOtros.length > 0 && (
+                        <optgroup label="Otros técnicos disponibles">
+                          {tecnicosOtros.map((t) => (
+                            <option key={t._id} value={t._id}>
+                              {t.nombre || t.nombre_completo} · {t.perfil_operativo?.departamento || 'General'}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </div>
+                )}
+              </InfoCard>
+
+              {/* Registro y Atención + Indicador de Retención (60 días) */}
+              <InfoCard
+                icono={Clock}
+                tono="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                titulo="Registro y Tiempo de Atención"
+              >
+                <p className="text-sm font-semibold text-[var(--color-text)]">
+                  Registrada el {formatearFecha(inc.fecha_creacion || inc.fecha_reporte)}
+                </p>
+                <p className="text-xs font-semibold text-[var(--color-success)] mt-0.5">
+                  {inc.horas_invertidas || 0} horas dedicadas
+                  {tieneResolucion &&
+                    ` · Resuelta el ${formatearFecha(inc.fecha_resolucion || new Date(), false)}`}
+                </p>
+                {tieneResolucion && (
+                  <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20 text-[11px] font-medium">
+                    <ShieldCheck size={13} className="text-emerald-600 shrink-0" />
+                    <span>Depuración automática programada a los 60 días de su resolución</span>
+                  </div>
+                )}
+              </InfoCard>
             </div>
-            {tieneRol('tecnico', 'coordinador', 'administrador') && (
-              <form onSubmit={agregarEtiqueta} className="flex gap-2 max-w-sm">
+          </Seccion>
+
+          {/* Bloque único de Gestión de la incidencia */}
+          {puedeEditarSeguimiento && (
+            <Seccion icono={Clock} titulo="Gestión de la Incidencia">
+              <form
+                onSubmit={handleGuardarSeguimiento}
+                className="p-4 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] space-y-3"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label
+                      htmlFor="sel-estado-unificado"
+                      className="form-label text-xs font-semibold mb-1 block"
+                    >
+                      Cambiar estado a:
+                    </label>
+                    <select
+                      id="sel-estado-unificado"
+                      className="form-select text-sm"
+                      value={nuevoEstado}
+                      onChange={(e) => setNuevoEstado(e.target.value)}
+                    >
+                      {Object.entries(ESTADOS).map(([valor, { label }]) => (
+                        <option key={valor} value={valor}>
+                          {label} {valor === inc.estado ? '(Estado actual)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="input-horas-unificado"
+                      className="form-label text-xs font-semibold mb-1 block"
+                    >
+                      Horas dedicadas a sumar:
+                    </label>
+                    <input
+                      id="input-horas-unificado"
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      className="form-input text-sm"
+                      placeholder="Ej. 1.5 horas"
+                      value={horasInput}
+                      onChange={(e) => setHorasInput(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="input-comentario-unificado"
+                    className="form-label text-xs font-semibold mb-1 block"
+                  >
+                    Nota o comentario de seguimiento:
+                  </label>
+                  <textarea
+                    id="input-comentario-unificado"
+                    className="form-textarea text-sm"
+                    rows={2}
+                    placeholder="Describe las acciones realizadas, diagnóstico o avances de atención..."
+                    value={notaSeguimiento}
+                    onChange={(e) => setNotaSeguimiento(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--color-border-subtle)]">
+                  <span className="text-xs text-[var(--color-text-muted)]">
+                    Guarda simultáneamente el nuevo estado, las horas invertidas y la nota en el historial.
+                  </span>
+                  <button
+                    id="btn-guardar-seguimiento"
+                    type="submit"
+                    className="btn btn--primary flex items-center gap-1.5 whitespace-nowrap"
+                    disabled={cargando}
+                  >
+                    <Send size={14} />
+                    <span>Guardar seguimiento</span>
+                  </button>
+                </div>
+              </form>
+            </Seccion>
+          )}
+
+          {/* Etiquetas */}
+          <Seccion icono={Tag} titulo="Etiquetas de Clasificación">
+            {inc.tags?.length ? (
+              <div className="flex flex-wrap gap-2">
+                {inc.tags.map((tag) => (
+                  <span key={tag} className="badge badge--primary gap-1.5 py-1 px-3 capitalize">
+                    {etiquetaLegible(tag)}
+                    {puedeGestionarTags && (
+                      <button
+                        type="button"
+                        className="opacity-60 hover:opacity-100 hover:text-red-500 transition ml-1"
+                        onClick={() => eliminarEtiqueta(tag)}
+                        disabled={cargando}
+                        title={`Quitar etiqueta "${tag}"`}
+                        aria-label={`Quitar etiqueta ${tag}`}
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs italic text-[var(--color-text-muted)]">Sin etiquetas registradas.</p>
+            )}
+            {puedeGestionarTags && (
+              <form onSubmit={agregarEtiqueta} className="flex gap-2 mt-3 max-w-sm">
                 <input
-                  className="form-input text-xs py-1"
-                  placeholder="Nueva etiqueta..."
+                  id="input-nueva-etiqueta"
+                  className="form-input"
+                  placeholder="Agregar etiqueta descriptiva..."
                   value={nuevoTag}
                   onChange={(e) => setNuevoTag(e.target.value)}
+                  maxLength={40}
                 />
-                <button type="submit" className="btn btn--secondary text-xs px-2.5">
+                <button
+                  type="submit"
+                  className="btn btn--secondary whitespace-nowrap"
+                  disabled={!nuevoTag.trim() || cargando}
+                >
                   <Plus size={14} /> Añadir
                 </button>
               </form>
             )}
-          </div>
+          </Seccion>
 
-          {/* Carga y Lista de Evidencias (RF-02) */}
-          <div className="detail-section">
-            <h3 className="detail-section__title flex items-center justify-between">
-              <span className="flex items-center gap-1.5"><Paperclip size={16} /> Evidencias Adjuntas (RF-02)</span>
-              {tieneRol('reportante', 'tecnico', 'coordinador', 'administrador') && (
-                <label className="btn btn--secondary btn--sm cursor-pointer text-xs">
-                  <Upload size={14} />
-                  <span>Subir archivo</span>
+          {/* Evidencias adjuntas */}
+          <Seccion
+            icono={Paperclip}
+            titulo={`Archivos y Evidencias (${evidencias.length})`}
+            accion={
+              puedeSubirEvidencia ? (
+                <label
+                  className={`btn btn--secondary btn--sm cursor-pointer ${
+                    cargando ? 'opacity-50 pointer-events-none' : ''
+                  }`}
+                >
+                  <Upload size={13} />
+                  <span>Adjuntar evidencia</span>
                   <input
+                    id="input-evidencia"
                     type="file"
                     className="hidden"
                     onChange={subirArchivo}
-                    accept="image/*,.pdf,video/*"
+                    accept="image/jpeg,image/png,image/webp,application/pdf,video/mp4,video/quicktime"
                   />
                 </label>
-              )}
-            </h3>
-
-            {inc.evidencias_adjuntas?.length === 0 ? (
-              <p className="text-xs text-slate-500 italic">No hay evidencias adjuntas en esta incidencia.</p>
+              ) : null
+            }
+          >
+            {evidencias.length === 0 ? (
+              <p className="text-xs italic text-[var(--color-text-muted)]">
+                No hay archivos adjuntos. Formatos admitidos: imágenes (JPG, PNG, WEBP), PDF y video MP4 (máx. 5 MB).
+              </p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-                {inc.evidencias_adjuntas.map((ev, i) => (
-                  <div key={i} className="flex items-center justify-between p-2 rounded bg-slate-900/60 border border-slate-800 text-xs">
-                    <div className="truncate mr-2">
-                      <a
-                        href={ev.url_storage}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-indigo-400 hover:underline font-medium truncate block"
-                      >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {evidencias.map((ev, i) => (
+                  <a
+                    key={`${ev.ruta_storage}-${i}`}
+                    href={ev.url_storage}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] hover:border-[var(--color-primary)] transition"
+                  >
+                    <Paperclip size={15} className="text-[var(--color-primary)] shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="block text-xs font-semibold text-[var(--color-text)] truncate">
                         {ev.nombre_archivo}
-                      </a>
-                      <span className="text-slate-500 text-[10px]">{ev.tipo_mime} • {ev.peso_kb} KB</span>
+                      </span>
+                      <span className="block text-[10px] text-[var(--color-text-muted)]">
+                        {ev.peso_kb} KB · {formatearFecha(ev.fecha_carga, false)}
+                      </span>
                     </div>
-                    <a
-                      href={ev.url_storage}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="badge badge--info text-[10px]"
-                    >
-                      Ver
-                    </a>
-                  </div>
+                  </a>
                 ))}
               </div>
             )}
-          </div>
+          </Seccion>
 
-          {/* Historial de Seguimiento (Timeline) */}
-          <div className="detail-section">
-            <h3 className="detail-section__title flex items-center gap-1.5">
-              <MessageSquare size={16} /> Historial de Seguimiento
-            </h3>
-            <div className="timeline">
-              {inc.historial_seguimiento?.map((entry, i) => {
-                const autorStr = typeof entry.autor === 'string'
-                  ? entry.autor
-                  : (entry.autor?.nombre_completo || entry.autor?.nombre || 'Usuario');
-                return (
-                  <div key={i} className="timeline__item">
-                    <div className="timeline__dot" />
-                    <div className="timeline__content">
-                      <div className="timeline__header">
-                        <strong>{autorStr}</strong>
-                        <span className="badge badge--outline badge--sm">
-                          {entry.estado_asignado?.toUpperCase() || 'NOTA'}
+          {/* Historial de atención (Línea de tiempo de solo lectura) */}
+          <Seccion icono={MessageSquare} titulo={`Historial de Atención (${historial.length})`}>
+            {historial.length === 0 ? (
+              <p className="text-xs italic text-[var(--color-text-muted)]">
+                Sin movimientos registrados en el historial.
+              </p>
+            ) : (
+              <ol className="relative border-l-2 border-[var(--color-border)] ml-2 space-y-4">
+                {historial.map((h, i) => {
+                  const est = ESTADOS[h.estado_asignado];
+                  return (
+                    <li key={`${h.fecha}-${i}`} className="ml-5">
+                      <span
+                        className={`absolute -left-[7px] mt-1.5 w-3 h-3 rounded-full ring-4 ring-[var(--color-surface)] ${
+                          est?.dot || 'bg-gray-400'
+                        }`}
+                      />
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--color-text-muted)]">
+                        <span className="font-semibold text-[var(--color-text)]">
+                          {h.autor || 'Sistema'}
                         </span>
-                        <time>{new Date(entry.fecha).toLocaleString('es-MX')}</time>
+                        <span>·</span>
+                        <span>{formatearFecha(h.fecha)}</span>
+                        {est && <span className={`campus-badge ${est.clase} py-0`}>{est.label}</span>}
                       </div>
-                      <p>{entry.comentario || entry.descripcion}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Agregar Nota Técnica */}
-            {tieneRol('tecnico', 'coordinador', 'administrador') && (
-              <form onSubmit={agregarNota} className="mt-4 flex gap-2">
-                <input
-                  className="form-input text-xs"
-                  placeholder="Escriba un comentario o nota técnica..."
-                  value={nota}
-                  onChange={(e) => setNota(e.target.value)}
-                />
-                <button type="submit" className="btn btn--primary text-xs flex items-center gap-1">
-                  <Send size={14} /> Registrar
-                </button>
-              </form>
+                      <p className="text-[13px] text-[var(--color-text-secondary)] mt-1 bg-[var(--color-bg)] p-2.5 rounded-lg border border-[var(--color-border)]">
+                        {h.comentario}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ol>
             )}
-          </div>
+          </Seccion>
         </div>
 
+        {/* ─── Footer ─────────────────────────────────────────── */}
         <div className="modal__footer">
-          <button type="button" className="btn btn--secondary" onClick={onClose}>
+          <button
+            id="btn-cerrar-detalle"
+            type="button"
+            className="btn btn--secondary"
+            onClick={onClose}
+          >
             Cerrar
           </button>
         </div>

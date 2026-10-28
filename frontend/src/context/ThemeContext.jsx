@@ -19,10 +19,8 @@ export const ThemeProvider = ({ children }) => {
     if (saved === 'light' || saved === 'dark') {
       return saved;
     }
-    // Por defecto modo oscuro elegante institucional
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
-      ? 'light'
-      : 'dark';
+    // Por defecto modo claro institucional campus
+    return 'light';
   });
 
   useEffect(() => {

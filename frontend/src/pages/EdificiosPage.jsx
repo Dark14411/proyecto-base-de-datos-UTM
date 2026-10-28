@@ -135,28 +135,28 @@ const EdificiosPage = () => {
             <div key={ed._id} className="card edificio-card hover:border-indigo-500/40 transition-all">
               <div className="card__header flex items-center justify-between">
                 <h2 className="card__title flex items-center gap-2">
-                  <Building2 size={20} className="text-indigo-400" />
+                  <Building2 size={20} className="text-[var(--color-primary)]" />
                   {ed.nombre}
                 </h2>
                 <span className="badge badge--info font-mono">{ed.clave}</span>
               </div>
               <div className="card__body">
-                <p className="edificio-card__desc text-sm text-slate-300">
+                <p className="edificio-card__desc text-sm text-[var(--color-text-secondary)]">
                   {ed.descripcion || 'Infraestructura general del campus universitario.'}
                 </p>
-                <div className="edificio-card__meta flex gap-4 my-3 text-xs text-slate-400">
+                <div className="edificio-card__meta flex gap-4 my-3 text-xs text-[var(--color-text-muted)]">
                   <span className="flex items-center gap-1">
-                    <Layers size={14} className="text-indigo-400" />
+                    <Layers size={14} className="text-[var(--color-primary)]" />
                     {ed.pisos} nivel{ed.pisos > 1 ? 'es' : ''}
                   </span>
                   <span className="flex items-center gap-1">
-                    <MapPin size={14} className="text-emerald-400" />
+                    <MapPin size={14} className="text-emerald-600 dark:text-emerald-400" />
                     {ed.aulas?.length || 0} espacio(s)
                   </span>
                 </div>
                 {ed.aulas?.length > 0 && (
-                  <div className="edificio-card__aulas mt-3 pt-3 border-t border-slate-700/50">
-                    <h4 className="text-xs font-semibold text-slate-400 mb-2">Aulas y Espacios:</h4>
+                  <div className="edificio-card__aulas mt-3 pt-3 border-t border-[var(--color-border-subtle)]">
+                    <h4 className="text-xs font-semibold text-[var(--color-text-muted)] mb-2">Aulas y Espacios:</h4>
                     <div className="edificio-card__aulas-list flex flex-wrap gap-1.5">
                       {ed.aulas.map((aula, idx) => (
                         <span key={aula._id || idx} className="badge badge--secondary text-xs flex items-center gap-1">
