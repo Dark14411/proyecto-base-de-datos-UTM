@@ -6,8 +6,16 @@ const Redis = require('ioredis');
 let redisClient = null;
 
 const connectRedis = () => {
+  if (redisClient && (redisClient.status === 'ready' || redisClient.status === 'connecting' || redisClient.status === 'connect')) {
+    return redisClient;
+  }
+
   try {
     const url = process.env.REDIS_URL;
+    if (!url) {
+      console.warn('⚠️ REDIS_URL no está configurada.');
+      return null;
+    }
     const isTls = url && url.startsWith('rediss://');
 
     const options = {

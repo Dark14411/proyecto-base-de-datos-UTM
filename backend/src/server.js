@@ -37,6 +37,26 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Asegurar conexiones a bases de datos (MongoDB Atlas + Redis)
+let conexionIniciada = false;
+const asegurarConexiones = async () => {
+  if (!conexionIniciada) {
+    await connectDB();
+    connectRedis();
+    conexionIniciada = true;
+  }
+};
+
+// Middleware para asegurar conexiones en entornos serverless (Vercel)
+app.use(async (req, res, next) => {
+  try {
+    await asegurarConexiones();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── Ruta de salud ────────────────────────────────────────────
 app.get('/api/salud', (req, res) => {
   res.json({
@@ -70,23 +90,19 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ─── Iniciar servidor ─────────────────────────────────────────
-const iniciar = async () => {
-  // Conectar a MongoDB Atlas
-  await connectDB();
-
-  // Conectar a Redis (contador de folios)
-  connectRedis();
-
-  app.listen(PORT, () => {
-    console.log(`\n🚀 UTM Desk NoSQL — Backend corriendo en puerto ${PORT}`);
-    console.log(`📡 API: http://localhost:${PORT}/api/salud`);
-    console.log(`🗄️  Base de datos: ${process.env.DB_NAME}`);
-    console.log('─'.repeat(50));
+// ─── Iniciar servidor en entorno local o fuera de Vercel ────────
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
+  asegurarConexiones().then(() => {
+    app.listen(PORT, () => {
+      console.log(`\n🚀 UTM Desk NoSQL — Backend corriendo en puerto ${PORT}`);
+      console.log(`📡 API: http://localhost:${PORT}/api/salud`);
+      console.log(`🗄️  Base de datos: ${process.env.DB_NAME}`);
+      console.log('─'.repeat(50));
+    });
+  }).catch((err) => {
+    console.error('❌ Error al iniciar el servidor:', err);
+    process.exit(1);
   });
-};
+}
 
-iniciar().catch((err) => {
-  console.error('❌ Error al iniciar el servidor:', err);
-  process.exit(1);
-});
+module.exports = app;
