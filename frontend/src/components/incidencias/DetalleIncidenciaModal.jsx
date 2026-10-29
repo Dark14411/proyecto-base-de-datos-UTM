@@ -246,7 +246,9 @@ const DetalleIncidenciaModal = ({ incidencia: incInicial, onClose, onUpdated }) 
           {/* Descripción */}
           <div className="detail-section">
             <h3 className="detail-section__title">Descripción</h3>
-            <p className="detail-section__text">{inc.descripcion}</p>
+            <div className="detail-section__text max-h-36 overflow-y-auto pr-2 custom-scrollbar whitespace-pre-wrap">
+              {inc.descripcion}
+            </div>
           </div>
 
           {/* Detalle Polimórfico */}
@@ -418,7 +420,7 @@ const DetalleIncidenciaModal = ({ incidencia: incInicial, onClose, onUpdated }) 
             {inc.evidencias_adjuntas?.length === 0 ? (
               <p className="text-xs text-slate-500 italic">No hay evidencias adjuntas en esta incidencia.</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                 {inc.evidencias_adjuntas.map((ev, i) => (
                   <div key={i} className="flex items-center justify-between p-2 rounded bg-slate-900/60 border border-slate-800 text-xs">
                     <div className="truncate mr-2">
@@ -451,7 +453,7 @@ const DetalleIncidenciaModal = ({ incidencia: incInicial, onClose, onUpdated }) 
             <h3 className="detail-section__title flex items-center gap-1.5">
               <MessageSquare size={16} /> Historial de Seguimiento
             </h3>
-            <div className="timeline">
+            <div className="timeline max-h-64 overflow-y-auto pr-2 custom-scrollbar">
               {inc.historial_seguimiento?.map((entry, i) => {
                 const autorStr = typeof entry.autor === 'string'
                   ? entry.autor

@@ -317,7 +317,7 @@ const DashboardPage = () => {
               </span>
             </div>
           ) : (
-            <div className="table-responsive">
+            <div className="table-responsive custom-scrollbar">
               <table className="minimal-table">
                 <thead>
                   <tr>

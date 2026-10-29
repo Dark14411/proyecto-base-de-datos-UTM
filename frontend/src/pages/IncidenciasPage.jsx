@@ -205,7 +205,7 @@ const IncidenciasPage = () => {
             </div>
           ) : (
             <>
-              <div className="table-responsive">
+              <div className="table-responsive table-scrollable custom-scrollbar">
                 <table className="table">
                   <thead>
                     <tr>

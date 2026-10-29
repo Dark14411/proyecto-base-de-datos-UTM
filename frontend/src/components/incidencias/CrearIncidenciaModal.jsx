@@ -177,10 +177,9 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
       setEnviando(false);
     }
   };
-
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
@@ -203,7 +202,8 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
           </div>
         )}
 
-        <form className="modal__body" onSubmit={handleSubmit}>
+        <form className="modal__form flex-1 flex flex-col min-h-0 overflow-hidden" onSubmit={handleSubmit}>
+          <div className="modal__body modal__body--scroll">
           {/* Título */}
           <div className="form-group">
             <label className="form-label">Título de la Incidencia *</label>
@@ -492,6 +492,8 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
               value={form.tags}
               onChange={(e) => setForm({ ...form, tags: e.target.value })}
             />
+          </div>
+
           </div>
 
           <div className="modal__footer">
