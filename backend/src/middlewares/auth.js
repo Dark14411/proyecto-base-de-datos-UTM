@@ -6,7 +6,7 @@ const Usuario = require('../models/Usuario');
 
 /**
  * Middleware: Verificar token JWT en el header Authorization.
- * Extrae el usuario y lo adjunta a req.usuario.
+ * Extrae el usuario de usuarios_campus y lo adjunta a req.usuario.
  */
 const protegerRuta = async (req, res, next) => {
   try {
@@ -29,9 +29,9 @@ const protegerRuta = async (req, res, next) => {
     // Verificar y decodificar token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Buscar usuario en la BD
+    // Buscar usuario en la colección usuarios_campus
     const usuario = await Usuario.findById(decoded.id);
-    if (!usuario || !usuario.cuenta_activa) {
+    if (!usuario || usuario.cuenta_activa === false || usuario.activo === false) {
       return res.status(401).json({
         exito: false,
         mensaje: 'Token inválido o cuenta desactivada.',
@@ -52,19 +52,21 @@ const protegerRuta = async (req, res, next) => {
  * Middleware: Autorizar solo ciertos roles (RBAC).
  * Uso: autorizar('coordinador', 'administrador')
  *
- * Matriz de roles del ERS:
- * - reportante:     Crea incidencias, consulta solo las suyas
- * - tecnico:        Atiende sus incidencias asignadas
- * - coordinador:    Ve todas, asigna y reasigna técnicos
- * - directivo:      Solo lectura de analítica y reportes
- * - administrador:  Gestión de usuarios y roles
+ * Matriz de roles del ERS (Tabla 2 y Tabla 3):
+ * - reportante:     Crea incidencias, sube evidencias propias, consulta solo las suyas
+ * - tecnico:        Atiende sus incidencias asignadas, actualiza seguimiento atómico, tags y evidencias
+ * - coordinador:    Ve todas, asigna/reasigna técnicos, actualiza seguimiento, tags y ve analítica
+ * - directivo:      Solo lectura de analítica y de todas las incidencias
+ * - administrador:  Gestión de usuarios (usuarios_campus) y edificios (edificios_campus)
  */
 const autorizar = (...rolesPermitidos) => {
   return (req, res, next) => {
-    if (!rolesPermitidos.includes(req.usuario.rol)) {
+    const rolActual = (req.usuario.rol || req.usuario.rol_sistema || '').toLowerCase();
+    const permitidos = rolesPermitidos.map((r) => r.toLowerCase());
+    if (!permitidos.includes(rolActual)) {
       return res.status(403).json({
         exito: false,
-        mensaje: `Rol "${req.usuario.rol}" no tiene permiso para esta acción. Roles permitidos: ${rolesPermitidos.join(', ')}`,
+        mensaje: `Rol "${rolActual}" no tiene permiso para esta acción. Roles permitidos: ${rolesPermitidos.join(', ')}`,
       });
     }
     next();

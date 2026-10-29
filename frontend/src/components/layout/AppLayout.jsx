@@ -1,16 +1,17 @@
-// ═══════════════════════════════════════════════════════════════
-// components/layout/AppLayout.jsx — Layout principal con sidebar
-// ═══════════════════════════════════════════════════════════════
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import TopBar from './TopBar';
 
 const AppLayout = () => {
   return (
     <div className="app-layout">
       <Sidebar />
-      <main className="app-layout__content">
-        <Outlet />
-      </main>
+      <div className="app-layout__main">
+        <TopBar />
+        <main className="app-layout__content">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 };

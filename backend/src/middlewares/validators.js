@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // middlewares/validators.js — Validaciones con express-validator
 // ═══════════════════════════════════════════════════════════════
-const { body, param, query, validationResult } = require('express-validator');
+const { body, param, validationResult } = require('express-validator');
 
 /**
  * Middleware: Revisar errores de validación y responder 400 si hay.
@@ -11,6 +11,7 @@ const revisarValidacion = (req, res, next) => {
   if (!errores.isEmpty()) {
     return res.status(400).json({
       exito: false,
+      mensaje: errores.array()[0]?.msg || 'Error de validación en los campos enviados.',
       errores: errores.array().map((e) => ({
         campo: e.path,
         mensaje: e.msg,
@@ -25,11 +26,11 @@ const validarCrearIncidencia = [
   body('titulo')
     .trim()
     .notEmpty().withMessage('El título es obligatorio')
-    .isLength({ max: 200 }).withMessage('Máximo 200 caracteres'),
+    .isLength({ min: 5, max: 120 }).withMessage('El título debe tener entre 5 y 120 caracteres'),
   body('descripcion')
     .trim()
     .notEmpty().withMessage('La descripción es obligatoria')
-    .isLength({ max: 2000 }).withMessage('Máximo 2000 caracteres'),
+    .isLength({ min: 10, max: 2000 }).withMessage('La descripción debe tener al menos 10 caracteres'),
   body('categoria')
     .isIn(['computo_redes', 'infraestructura', 'academico', 'sistemas_academicos'])
     .withMessage('Categoría inválida'),
@@ -47,36 +48,45 @@ const validarCrearIncidencia = [
 const validarActualizarEstado = [
   param('id').isMongoId().withMessage('ID de incidencia inválido'),
   body('estado')
+    .optional({ values: 'falsy' })
     .isIn(['abierta', 'en_proceso', 'en_progreso', 'en_espera', 'resuelta', 'cerrada'])
     .withMessage('Estado inválido'),
-  body('descripcion')
-    .optional()
-    .trim()
-    .notEmpty().withMessage('La descripción del cambio no puede estar vacía'),
   revisarValidacion,
 ];
 
-// ─── Validaciones de Usuario ──────────────────────────────────
+// ─── Validaciones de Usuario (usuarios_campus) ────────────────
 const validarRegistro = [
-  body('nombre_completo')
-    .trim()
-    .notEmpty().withMessage('El nombre completo es obligatorio'),
+  body().custom((value, { req }) => {
+    const nombre = (req.body.nombre || req.body.nombre_completo || '').trim();
+    if (!nombre) {
+      throw new Error('El nombre del usuario es obligatorio');
+    }
+    return true;
+  }),
   body('correo')
-    .isEmail().withMessage('Correo inválido')
-    .normalizeEmail(),
+    .trim()
+    .toLowerCase()
+    .isEmail().withMessage('Correo electrónico inválido'),
   body('password')
+    .optional({ values: 'falsy' })
     .isLength({ min: 6 }).withMessage('La contraseña debe tener al menos 6 caracteres'),
   body('rol')
-    .optional()
-    .isIn(['reportante', 'tecnico', 'coordinador', 'directivo', 'administrador'])
-    .withMessage('Rol inválido'),
+    .optional({ values: 'falsy' })
+    .custom((val) => {
+      const limpio = String(val).toLowerCase();
+      if (!['reportante', 'tecnico', 'coordinador', 'directivo', 'administrador'].includes(limpio)) {
+        throw new Error('Rol inválido');
+      }
+      return true;
+    }),
   revisarValidacion,
 ];
 
 const validarLogin = [
   body('correo')
-    .isEmail().withMessage('Correo inválido')
-    .normalizeEmail(),
+    .trim()
+    .toLowerCase()
+    .isEmail().withMessage('Correo inválido'),
   body('password')
     .notEmpty().withMessage('La contraseña es obligatoria'),
   revisarValidacion,

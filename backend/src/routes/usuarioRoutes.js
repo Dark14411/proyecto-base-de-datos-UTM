@@ -50,6 +50,13 @@ router.put(
   actualizarUsuario
 );
 
+router.patch(
+  '/:id',
+  autorizar('administrador'),
+  validarIdMongo,
+  actualizarUsuario
+);
+
 router.delete(
   '/:id',
   autorizar('administrador'),

@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════════════
 // components/incidencias/CrearIncidenciaModal.jsx
-// Formulario polimórfico estricto según categoría (RF-01 y Figura 2)
+// Formulario de registro de incidencias del campus
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
-import { X, Send, Building2, AlertTriangle, Cpu, Wrench, GraduationCap } from 'lucide-react';
+import { X, Send, Building2, Monitor, Wrench, GraduationCap, AlertCircle } from 'lucide-react';
 
 const CrearIncidenciaModal = ({ onClose, onCreated }) => {
   const [form, setForm] = useState({
@@ -105,13 +105,22 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
   const updateDetalle = (campo, valor) => {
     setForm({
       ...form,
-      detalle_especifico: { ...form.detalle_especifico, [campo]: valor },
+      detalle_especifico: {
+        ...form.detalle_especifico,
+        [campo]: valor,
+      },
     });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!form.titulo.trim() || !form.descripcion.trim()) {
+      setError('Por favor complete el título y la descripción del reporte.');
+      return;
+    }
+
     setEnviando(true);
 
     try {
@@ -126,7 +135,10 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
       } else if (form.categoria === 'infraestructura') {
         let insumos = [];
         if (typeof form.detalle_especifico.insumos_requeridos === 'string') {
-          insumos = form.detalle_especifico.insumos_requeridos.split(',').map(s => s.trim()).filter(Boolean);
+          insumos = form.detalle_especifico.insumos_requeridos
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
         } else if (Array.isArray(form.detalle_especifico.insumos_requeridos)) {
           insumos = form.detalle_especifico.insumos_requeridos;
         }
@@ -157,8 +169,8 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
         categoria: form.categoria,
         prioridad: form.prioridad,
         ubicacion: {
-          edificio: form.ubicacion.edificio || 'Edificio K',
-          aula_espacio: form.ubicacion.aula_espacio || 'Laboratorio General',
+          edificio: form.ubicacion.edificio || 'Edificio A',
+          aula_espacio: form.ubicacion.aula_espacio || 'Aula General',
         },
         detalle_especifico: detalleFinal,
         tags: tagsArray,
@@ -177,39 +189,38 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
       setEnviando(false);
     }
   };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
+        {/* Cabecera del Modal */}
         <div className="modal__header">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
-              <AlertTriangle size={22} />
-            </div>
-            <div>
-              <h2 className="modal__title">Nueva Incidencia en el Campus</h2>
-              <p className="text-xs text-slate-400">Modelo Polimórfico NoSQL validado con $jsonSchema</p>
-            </div>
+          <div>
+            <h2 className="modal__title">Nueva incidencia en el campus</h2>
+            <p className="text-xs text-gray-500">Reporta un problema o solicitud de atención técnica</p>
           </div>
-          <button className="btn btn--ghost" onClick={onClose}>
+          <button className="modal-close" onClick={onClose} aria-label="Cerrar modal">
             <X size={20} />
           </button>
         </div>
 
+        {/* Mensaje de Error */}
         {error && (
-          <div className="modal__error">
-            <AlertTriangle size={18} />
+          <div className="modal__error flex items-center gap-2">
+            <AlertCircle size={16} className="shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
-        <form className="modal__form flex-1 flex flex-col min-h-0 overflow-hidden" onSubmit={handleSubmit}>
-          <div className="modal__body modal__body--scroll">
-          {/* Título */}
-          <div className="form-group">
-            <label className="form-label">Título de la Incidencia *</label>
+        {/* Formulario */}
+        <form onSubmit={handleSubmit} className="modal__form">
+          <div className="modal__body">
+            {/* Título */}
+            <div className="form-group">
+            <label className="form-label">Título del reporte *</label>
             <input
               className="form-input"
-              placeholder="Ej. Caída de conexión en switch de laboratorio"
+              placeholder="Ej. Sin acceso a internet en laboratorio de cómputo"
               value={form.titulo}
               onChange={(e) => setForm({ ...form, titulo: e.target.value })}
               minLength={5}
@@ -220,10 +231,10 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
 
           {/* Descripción */}
           <div className="form-group">
-            <label className="form-label">Descripción Detallada *</label>
+            <label className="form-label">Descripción detallada *</label>
             <textarea
-              className="form-input form-textarea"
-              placeholder="Describa claramente el problema observado, síntomas y contexto..."
+              className="form-textarea"
+              placeholder="Describe detalladamente la falla observada, síntomas y contexto del problema..."
               value={form.descripcion}
               onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
               minLength={10}
@@ -236,15 +247,15 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
           <div className="form-row">
             {/* Categoría */}
             <div className="form-group">
-              <label className="form-label">Categoría Polimórfica *</label>
+              <label className="form-label">Categoría *</label>
               <select
                 className="form-select"
                 value={form.categoria}
                 onChange={(e) => handleCategoriaChange(e.target.value)}
               >
-                <option value="computo_redes">💻 Cómputo y Redes</option>
-                <option value="infraestructura">🏗️ Infraestructura y Mantenimiento</option>
-                <option value="academico">🎓 Sistemas y Servicios Académicos</option>
+                <option value="computo_redes">Cómputo y redes</option>
+                <option value="infraestructura">Infraestructura y mantenimiento</option>
+                <option value="academico">Servicios académicos</option>
               </select>
             </div>
 
@@ -256,10 +267,10 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
                 value={form.prioridad}
                 onChange={(e) => setForm({ ...form, prioridad: e.target.value })}
               >
-                <option value="baja">🟢 Baja</option>
-                <option value="media">🟡 Media</option>
-                <option value="alta">🟠 Alta</option>
-                <option value="critica">🔴 Crítica</option>
+                <option value="baja">Baja</option>
+                <option value="media">Media</option>
+                <option value="alta">Alta</option>
+                <option value="critica">Crítica</option>
               </select>
             </div>
           </div>
@@ -267,7 +278,7 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
           {/* Ubicación */}
           <fieldset className="form-fieldset">
             <legend className="flex items-center gap-1.5">
-              <Building2 size={16} /> Ubicación Estandarizada
+              <Building2 size={15} /> Ubicación en el campus
             </legend>
             <div className="form-row">
               <div className="form-group">
@@ -278,12 +289,12 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
                   onChange={(e) => handleEdificioChange(e.target.value)}
                   required
                 >
-                  <option value="">Seleccionar edificio</option>
+                  <option value="">Seleccionar edificio...</option>
                   {edificios.map((ed) => {
                     const nombre = ed.nombre || ed.nombre_edificio;
                     return (
                       <option key={ed._id} value={nombre}>
-                        {nombre} ({ed.clave || ed.codigo_edificio || 'EDIF'})
+                        {nombre}
                       </option>
                     );
                   })}
@@ -302,7 +313,7 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
                   }
                   required
                 >
-                  <option value="">Seleccionar espacio</option>
+                  <option value="">Seleccionar espacio...</option>
                   {espaciosDelEdificio().map((espacio, idx) => (
                     <option key={idx} value={espacio}>
                       {espacio}
@@ -313,18 +324,18 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
             </div>
           </fieldset>
 
-          {/* Subdocumento Polimórfico: Cómputo y Redes */}
+          {/* Parámetros Específicos: Cómputo y Redes */}
           {form.categoria === 'computo_redes' && (
             <fieldset className="form-fieldset">
-              <legend className="flex items-center gap-1.5 text-indigo-400">
-                <Cpu size={16} /> Detalle Específico: Cómputo y Telecomunicaciones
+              <legend className="flex items-center gap-1.5">
+                <Monitor size={15} /> Datos técnicos de conectividad
               </legend>
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Dirección IP *</label>
                   <input
                     className="form-input"
-                    placeholder="Ej. 192.168.20.1"
+                    placeholder="Ej. 192.168.10.15"
                     value={form.detalle_especifico.direccion_ip}
                     onChange={(e) => updateDetalle('direccion_ip', e.target.value)}
                     required
@@ -334,7 +345,7 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
                   <label className="form-label">VLAN *</label>
                   <input
                     className="form-input"
-                    placeholder="Ej. VLAN-20-LABS"
+                    placeholder="Ej. VLAN-10-DOCENCIA"
                     value={form.detalle_especifico.vlan}
                     onChange={(e) => updateDetalle('vlan', e.target.value)}
                     required
@@ -353,11 +364,11 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Equipos Afectados *</label>
+                  <label className="form-label">Equipos afectados *</label>
                   <input
                     className="form-input"
                     type="number"
-                    min="0"
+                    min="1"
                     value={form.detalle_especifico.equipos_afectados}
                     onChange={(e) => updateDetalle('equipos_afectados', e.target.value)}
                     required
@@ -367,15 +378,15 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
             </fieldset>
           )}
 
-          {/* Subdocumento Polimórfico: Infraestructura */}
+          {/* Parámetros Específicos: Infraestructura */}
           {form.categoria === 'infraestructura' && (
             <fieldset className="form-fieldset">
-              <legend className="flex items-center gap-1.5 text-amber-400">
-                <Wrench size={16} /> Detalle Específico: Infraestructura Física
+              <legend className="flex items-center gap-1.5">
+                <Wrench size={15} /> Parámetros de infraestructura
               </legend>
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Tipo de Daño *</label>
+                  <label className="form-label">Tipo de daño *</label>
                   <select
                     className="form-select"
                     value={form.detalle_especifico.tipo_dano}
@@ -383,15 +394,15 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
                     required
                   >
                     <option value="filtracion_techo">Filtración en techo / Gotera</option>
-                    <option value="climatizacion">Falla de climatización (A/C)</option>
-                    <option value="luminaria">Luminaria fundida / Cableado expuesto</option>
-                    <option value="mobiliario">Mobiliario dañado / Butacas rotas</option>
+                    <option value="climatizacion">Falla de aire acondicionado / Clima</option>
+                    <option value="luminaria">Luminaria o instalación eléctrica</option>
+                    <option value="mobiliario">Mobiliario / Puertas / Cerraduras</option>
                     <option value="plomeria">Plomería / Sanitarios</option>
-                    <option value="electrico">Cortocircuito / Tablero eléctrico</option>
+                    <option value="electrico">Tablero eléctrico / Contactos</option>
                   </select>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Nivel de Riesgo *</label>
+                  <label className="form-label">Nivel de riesgo *</label>
                   <select
                     className="form-select"
                     value={form.detalle_especifico.nivel_riesgo}
@@ -406,38 +417,39 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
               </div>
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Insumos Requeridos * (separados por coma)</label>
+                  <label className="form-label">Materiales o insumos estimados</label>
                   <input
                     className="form-input"
-                    placeholder="Ej. impermeabilizante, lamina_galvanizada"
+                    placeholder="Ej. impermeabilizante, sellador"
                     value={form.detalle_especifico.insumos_requeridos}
                     onChange={(e) => updateDetalle('insumos_requeridos', e.target.value)}
                     required
                   />
                 </div>
                 <div className="form-group flex items-center pt-6">
-                  <label className="form-label form-label--checkbox flex items-center gap-2 cursor-pointer">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-gray-700 dark:text-gray-300">
                     <input
                       type="checkbox"
                       checked={form.detalle_especifico.requiere_contratista}
                       onChange={(e) => updateDetalle('requiere_contratista', e.target.checked)}
+                      className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                     />
-                    <span>Requiere intervención de contratista</span>
+                    <span>Requiere apoyo de cuadrilla externa</span>
                   </label>
                 </div>
               </div>
             </fieldset>
           )}
 
-          {/* Subdocumento Polimórfico: Académico */}
+          {/* Parámetros Específicos: Académico */}
           {form.categoria === 'academico' && (
             <fieldset className="form-fieldset">
-              <legend className="flex items-center gap-1.5 text-emerald-400">
-                <GraduationCap size={16} /> Detalle Específico: Sistemas Académicos
+              <legend className="flex items-center gap-1.5">
+                <GraduationCap size={15} /> Parámetros del servicio académico
               </legend>
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Plataforma *</label>
+                  <label className="form-label">Plataforma o sistema *</label>
                   <input
                     className="form-input"
                     placeholder="Ej. Portal de calificaciones, Aula Virtual"
@@ -447,10 +459,10 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Código de Curso *</label>
+                  <label className="form-label">Código de materia o curso *</label>
                   <input
                     className="form-input"
-                    placeholder="Ej. BDN-301, TI-402"
+                    placeholder="Ej. TI-301"
                     value={form.detalle_especifico.codigo_curso}
                     onChange={(e) => updateDetalle('codigo_curso', e.target.value)}
                     required
@@ -459,21 +471,21 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
               </div>
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Período Escolar *</label>
+                  <label className="form-label">Periodo escolar *</label>
                   <input
                     className="form-input"
-                    placeholder="Ej. Septiembre-Diciembre 2026"
+                    placeholder="Ej. Septiembre - Diciembre 2026"
                     value={form.detalle_especifico.periodo_escolar}
                     onChange={(e) => updateDetalle('periodo_escolar', e.target.value)}
                     required
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Estudiantes Afectados *</label>
+                  <label className="form-label">Estudiantes afectados *</label>
                   <input
                     className="form-input"
                     type="number"
-                    min="0"
+                    min="1"
                     value={form.detalle_especifico.estudiantes_afectados}
                     onChange={(e) => updateDetalle('estudiantes_afectados', e.target.value)}
                     required
@@ -483,12 +495,12 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
             </fieldset>
           )}
 
-          {/* Etiquetas / Tags */}
+          {/* Etiquetas */}
           <div className="form-group">
-            <label className="form-label">Etiquetas Descriptivas (separadas por coma)</label>
+            <label className="form-label">Etiquetas clave (separadas por coma)</label>
             <input
               className="form-input"
-              placeholder="Ej. switch, dhcp, fibra-optica, aula-12"
+              placeholder="Ej. switch, cableado, aula-12"
               value={form.tags}
               onChange={(e) => setForm({ ...form, tags: e.target.value })}
             />
@@ -496,15 +508,18 @@ const CrearIncidenciaModal = ({ onClose, onCreated }) => {
 
           </div>
 
+          {/* Botones de acción */}
           <div className="modal__footer">
             <button type="button" className="btn btn--secondary" onClick={onClose} disabled={enviando}>
               Cancelar
             </button>
             <button type="submit" className="btn btn--primary" disabled={enviando}>
-              {enviando ? 'Guardando en MongoDB Atlas...' : (
+              {enviando ? (
+                'Guardando reporte...'
+              ) : (
                 <>
-                  <Send size={16} />
-                  Registrar Incidencia
+                  <Send size={15} />
+                  <span>Registrar incidencia</span>
                 </>
               )}
             </button>

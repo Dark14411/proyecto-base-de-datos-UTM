@@ -9,12 +9,24 @@ const { Schema } = mongoose;
 
 const usuarioSchema = new Schema(
   {
-    nombre_completo: {
+    matricula_o_clave: {
       type: String,
-      required: [true, 'El nombre completo es obligatorio'],
+      trim: true,
+      default: function () {
+        return this.matricula_o_numero_empleado || `EMP-${Date.now().toString().slice(-4)}`;
+      },
+    },
+    matricula_o_numero_empleado: {
+      type: String,
+      sparse: true,
       trim: true,
     },
     nombre: {
+      type: String,
+      trim: true,
+      required: [true, 'El nombre es obligatorio'],
+    },
+    nombre_completo: {
       type: String,
       trim: true,
     },
@@ -32,9 +44,13 @@ const usuarioSchema = new Schema(
       minlength: 6,
       select: false,
     },
+    rol_sistema: {
+      type: String,
+      enum: ['Reportante', 'Tecnico', 'Coordinador', 'Directivo', 'Administrador'],
+      default: 'Reportante',
+    },
     rol: {
       type: String,
-      required: true,
       enum: [
         'reportante',
         'tecnico',
@@ -44,44 +60,19 @@ const usuarioSchema = new Schema(
       ],
       default: 'reportante',
     },
-    rol_sistema: {
-      type: String,
-      enum: ['Reportante', 'Tecnico', 'Coordinador', 'Directivo', 'Administrador', 'Admin'],
-    },
-    matricula_o_clave: {
-      type: String,
-      trim: true,
-    },
-    matricula_o_numero_empleado: {
-      type: String,
-      sparse: true,
-      trim: true,
-    },
-    departamento: String,
-    telefono: String,
-
-    // ─── Campos específicos para técnicos ─────────────────────
-    especialidades: [
-      {
-        type: String,
-        enum: [
-          'computo_redes',
-          'infraestructura',
-          'academico',
-          'sistemas_academicos',
-        ],
-      },
-    ],
+    activo: { type: Boolean, default: true },
+    cuenta_activa: { type: Boolean, default: true },
 
     perfil_operativo: {
-      departamento: String,
-      especialidades: [String],
-      cargo: String,
+      departamento: { type: String, default: 'Comunidad Universitaria' },
+      especialidades: { type: [String], default: [] },
+      cargo: { type: String, default: 'General' },
     },
 
-    // ─── Estado de la cuenta ──────────────────────────────────
-    cuenta_activa: { type: Boolean, default: true },
-    activo: { type: Boolean, default: true },
+    departamento: String,
+    telefono: String,
+    especialidades: [String],
+
     fecha_alta: { type: Date, default: Date.now },
     ultimo_acceso: Date,
   },
@@ -92,16 +83,78 @@ const usuarioSchema = new Schema(
 );
 
 // ─── Índices ──────────────────────────────────────────────────
-usuarioSchema.index({ rol: 1, cuenta_activa: 1 }, { name: 'idx_rol_activo' });
+usuarioSchema.index({ rol: 1, activo: 1 }, { name: 'idx_rol_activo' });
+usuarioSchema.index({ rol_sistema: 1, activo: 1 }, { name: 'idx_rol_sistema_activo' });
 
-// ─── Middleware: Encriptar contraseña antes de guardar ────────
+// ─── Middleware: Encriptar contraseña y sincronizar campos ────
 usuarioSchema.pre('save', async function (next) {
+  // Sincronizar nombres
   if (!this.nombre && this.nombre_completo) {
     this.nombre = this.nombre_completo;
   }
   if (!this.nombre_completo && this.nombre) {
     this.nombre_completo = this.nombre;
   }
+
+  // Sincronizar identificador/matrícula
+  if (!this.matricula_o_clave && this.matricula_o_numero_empleado) {
+    this.matricula_o_clave = this.matricula_o_numero_empleado;
+  }
+  if (!this.matricula_o_numero_empleado && this.matricula_o_clave) {
+    this.matricula_o_numero_empleado = this.matricula_o_clave;
+  }
+
+  // Sincronizar roles (rol_sistema <-> rol)
+  const mapRolToSistema = {
+    reportante: 'Reportante',
+    tecnico: 'Tecnico',
+    coordinador: 'Coordinador',
+    directivo: 'Directivo',
+    administrador: 'Administrador',
+    admin: 'Administrador',
+  };
+  const mapSistemaToRol = {
+    Reportante: 'reportante',
+    Tecnico: 'tecnico',
+    Coordinador: 'coordinador',
+    Directivo: 'directivo',
+    Administrador: 'administrador',
+    Admin: 'administrador',
+  };
+
+  if (this.rol_sistema && !this.rol) {
+    this.rol = mapSistemaToRol[this.rol_sistema] || 'reportante';
+  } else if (this.rol && !this.rol_sistema) {
+    this.rol_sistema = mapRolToSistema[this.rol.toLowerCase()] || 'Reportante';
+  } else if (this.rol && this.rol_sistema) {
+    this.rol = this.rol.toLowerCase();
+    this.rol_sistema = mapRolToSistema[this.rol] || this.rol_sistema;
+  }
+
+  // Sincronizar activo <-> cuenta_activa
+  if (this.activo !== undefined && this.cuenta_activa === undefined) {
+    this.cuenta_activa = this.activo;
+  } else if (this.cuenta_activa !== undefined && this.activo === undefined) {
+    this.activo = this.cuenta_activa;
+  } else if (this.activo !== undefined && this.cuenta_activa !== undefined) {
+    this.cuenta_activa = this.activo;
+  }
+
+  // Sincronizar perfil_operativo
+  const depto = this.departamento || this.perfil_operativo?.departamento || 'Comunidad Universitaria';
+  const esp = (this.especialidades && this.especialidades.length > 0)
+    ? this.especialidades
+    : (this.perfil_operativo?.especialidades || []);
+  const cargo = this.perfil_operativo?.cargo || this.rol_sistema || 'General';
+
+  this.perfil_operativo = {
+    departamento: depto,
+    especialidades: esp,
+    cargo,
+  };
+  this.departamento = depto;
+  this.especialidades = esp;
+
   if (!this.isModified('password_hash')) return next();
   // Solo hashear si no es ya un hash bcrypt ($2b$ o $2a$)
   if (!this.password_hash.startsWith('$2')) {

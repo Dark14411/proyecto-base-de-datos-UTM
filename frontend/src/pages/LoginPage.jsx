@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
 // pages/LoginPage.jsx — Inicio de Sesión Moderno con Selección por Recuadro
+// Sincronizado con los usuarios reales de usuarios_campus en MongoDB Atlas
 // ═══════════════════════════════════════════════════════════════
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ThemeToggle from '../components/ui/ThemeToggle';
@@ -23,10 +24,11 @@ import {
   ChevronDown,
   KeyRound,
   IdCard,
+  School,
 } from 'lucide-react';
 
 const LoginPage = () => {
-  const { login, registro } = useAuth();
+  const { login, registro, switchUsuario, usuariosCampus, recargarPerfiles } = useAuth();
   const navigate = useNavigate();
 
   // Estados de inicio de sesión manual
@@ -54,8 +56,12 @@ const LoginPage = () => {
   const [cargandoRegistro, setCargandoRegistro] = useState(false);
   const [exitoRegistro, setExitoRegistro] = useState(false);
 
-  // Lista organizada de usuarios preconfigurados con datos completos
-  const usuariosDirectos = [
+  useEffect(() => {
+    recargarPerfiles();
+  }, [recargarPerfiles]);
+
+  // Perfiles base preconfigurados
+  const usuariosBase = [
     {
       id: 'admin',
       categoria: 'gestion',
@@ -63,9 +69,10 @@ const LoginPage = () => {
       tituloRol: 'Administrador del Sistema',
       correo: 'admin@utm.mx',
       pass: 'admin123',
+      rol: 'administrador',
       rolBadge: 'ADMIN',
       departamento: 'Dirección de TI',
-      descripcion: 'Acceso total a usuarios, edificios, incidencias y analíticas.',
+      descripcion: 'Administración de cuentas institucionales y edificios del campus.',
       colorCard: 'user-box--admin',
       avatarGradient: 'from-rose-500 to-red-600',
       icono: Shield,
@@ -77,11 +84,12 @@ const LoginPage = () => {
       tituloRol: 'Coordinadora de Soporte',
       correo: 'coordinador@utm.mx',
       pass: 'coord123',
+      rol: 'coordinador',
       rolBadge: 'COORDINADOR',
       departamento: 'Coordinación de Soporte y Redes',
-      descripcion: 'Asignación de cuadrillas técnicas y seguimiento global.',
+      descripcion: 'Asignación de cuadrillas técnicas, seguimiento global y analítica.',
       colorCard: 'user-box--coord',
-      avatarGradient: 'from-indigo-500 to-purple-600',
+      avatarGradient: 'from-emerald-600 to-teal-700',
       icono: UserCheck,
     },
     {
@@ -91,9 +99,10 @@ const LoginPage = () => {
       tituloRol: 'Técnico Especialista en Redes',
       correo: 'mario.chan@utmetropolitana.edu.mx',
       pass: 'tecnico123',
+      rol: 'tecnico',
       rolBadge: 'TÉCNICO',
-      departamento: 'Redes y Cómputo Campus',
-      descripcion: 'Atención de cableado, routers, switches y conectividad.',
+      departamento: 'Dirección de Tecnologías de la Información',
+      descripcion: 'Atención de incidencias asignadas, actualización atómica y tags.',
       colorCard: 'user-box--tecnico-redes',
       avatarGradient: 'from-emerald-500 to-teal-600',
       icono: Wrench,
@@ -105,8 +114,9 @@ const LoginPage = () => {
       tituloRol: 'Técnico en Infraestructura',
       correo: 'luis.pech@utmetropolitana.edu.mx',
       pass: 'tecnico123',
+      rol: 'tecnico',
       rolBadge: 'TÉCNICO',
-      departamento: 'Mantenimiento e Instalaciones',
+      departamento: 'Mantenimiento e Infraestructura',
       descripcion: 'Reparación de iluminación, mobiliario y climatización.',
       colorCard: 'user-box--tecnico-infra',
       avatarGradient: 'from-teal-500 to-cyan-600',
@@ -119,9 +129,10 @@ const LoginPage = () => {
       tituloRol: 'Directivo Académico',
       correo: 'directivo@utm.mx',
       pass: 'directivo123',
+      rol: 'directivo',
       rolBadge: 'DIRECTIVO',
       departamento: 'Dirección Académica',
-      descripcion: 'Supervisión de métricas de servicio, SLAs y reportes.',
+      descripcion: 'Supervisión de analítica y consulta en modo de solo lectura.',
       colorCard: 'user-box--directivo',
       avatarGradient: 'from-amber-500 to-yellow-600',
       icono: GraduationCap,
@@ -133,9 +144,10 @@ const LoginPage = () => {
       tituloRol: 'Docente en Redes',
       correo: 'roberto.mendez@utmetropolitana.edu.mx',
       pass: 'utm123',
-      rolBadge: 'DOCENTE',
-      departamento: 'Docencia en Tecnologías',
-      descripcion: 'Reporta fallas en laboratorios y aulas de cómputo.',
+      rol: 'reportante',
+      rolBadge: 'REPORTANTE',
+      departamento: 'Docencia en Redes',
+      descripcion: 'Reporta fallas en laboratorios y consulta sus propios reportes.',
       colorCard: 'user-box--docente',
       avatarGradient: 'from-sky-500 to-blue-600',
       icono: GraduationCap,
@@ -143,12 +155,13 @@ const LoginPage = () => {
     {
       id: 'alumno',
       categoria: 'comunidad',
-      nombre: 'Carlos Santiago (Alumno)',
+      nombre: 'Carlos Santiago Euan Ayala',
       tituloRol: 'Estudiante UTM',
       correo: 'alumno@utm.mx',
       pass: 'utm123',
-      rolBadge: 'ALUMNO',
-      departamento: 'Ingeniería en Tecnologías',
+      rol: 'reportante',
+      rolBadge: 'REPORTANTE',
+      departamento: 'Tecnologías de la Información',
       descripcion: 'Levanta reportes de aulas, proyectores y áreas comunes.',
       colorCard: 'user-box--alumno',
       avatarGradient: 'from-violet-500 to-fuchsia-600',
@@ -156,24 +169,86 @@ const LoginPage = () => {
     },
   ];
 
+  // Incorporar dinámicamente cualquier usuario adicional creado en usuarios_campus
+  const correosBase = new Set(usuariosBase.map((u) => u.correo.toLowerCase()));
+  const usuariosDinamicos = (usuariosCampus || [])
+    .filter((u) => u.correo && !correosBase.has(u.correo.toLowerCase()) && u.activo !== false)
+    .map((u) => {
+      const rolMin = (u.rol || u.rol_sistema || 'reportante').toLowerCase();
+      const mapCat = {
+        administrador: 'gestion',
+        coordinador: 'gestion',
+        directivo: 'gestion',
+        tecnico: 'tecnico',
+        reportante: 'comunidad',
+      };
+      const mapIcono = {
+        administrador: Shield,
+        coordinador: UserCheck,
+        directivo: GraduationCap,
+        tecnico: Wrench,
+        reportante: GraduationCap,
+      };
+      return {
+        id: u._id || u.correo,
+        categoria: mapCat[rolMin] || 'comunidad',
+        nombre: u.nombre || u.nombre_completo,
+        tituloRol: u.perfil_operativo?.cargo || u.rol_sistema || 'Usuario del Campus',
+        correo: u.correo,
+        pass: null, // Usa switchUsuario directo desde MongoDB Atlas
+        rol: rolMin,
+        rolBadge: (u.rol_sistema || rolMin).toUpperCase(),
+        departamento: u.perfil_operativo?.departamento || u.departamento || 'Campus UTM',
+        descripcion: 'Usuario registrado en la colección usuarios_campus de MongoDB Atlas.',
+        colorCard: 'user-box--coord',
+        avatarGradient: 'from-emerald-600 to-teal-700',
+        icono: mapIcono[rolMin] || GraduationCap,
+      };
+    });
+
+  // Actualizar también nombres/roles de usuariosBase si fueron editados en MongoDB Atlas
+  const usuariosBaseSincronizados = usuariosBase.map((base) => {
+    const enBD = (usuariosCampus || []).find(
+      (u) => u.correo?.toLowerCase() === base.correo.toLowerCase()
+    );
+    if (!enBD) return base;
+    return {
+      ...base,
+      nombre: enBD.nombre || enBD.nombre_completo || base.nombre,
+      departamento: enBD.perfil_operativo?.departamento || enBD.departamento || base.departamento,
+    };
+  });
+
+  const todosLosPerfiles = [...usuariosBaseSincronizados, ...usuariosDinamicos];
+
   // Filtrar según categoría seleccionada
-  const usuariosFiltrados = usuariosDirectos.filter((u) => {
+  const usuariosFiltrados = todosLosPerfiles.filter((u) => {
     if (filtroCategoria === 'todos') return true;
     return u.categoria === filtroCategoria;
   });
 
   // Iniciar sesión y entrar inmediatamente con 1 clic
-  const ingresarDirecto = async (correo, pass, nombre) => {
+  const ingresarDirecto = async (u) => {
     setError('');
     setCargando(true);
-    setUsuarioIngresando(correo);
+    setUsuarioIngresando(u.correo);
 
     try {
-      const resultado = await login(correo, pass);
-      if (resultado.exito) {
+      let resultado;
+      if (u.pass) {
+        try {
+          resultado = await login(u.correo, u.pass);
+        } catch {
+          resultado = await switchUsuario(u.correo);
+        }
+      } else {
+        resultado = await switchUsuario(u.correo);
+      }
+
+      if (resultado?.exito) {
         navigate('/dashboard');
       } else {
-        setError(resultado.mensaje || 'Error al autenticar.');
+        setError(resultado?.mensaje || 'Error al autenticar.');
       }
     } catch (err) {
       setError(err.response?.data?.mensaje || 'Error de conexión con el servidor API.');
@@ -233,12 +308,13 @@ const LoginPage = () => {
 
     try {
       const datosParaEnviar = {
+        nombre: formRegistro.nombre_completo.trim(),
         nombre_completo: formRegistro.nombre_completo.trim(),
         correo: formRegistro.correo.trim().toLowerCase(),
         password: formRegistro.password,
         rol: formRegistro.rol,
         departamento: formRegistro.departamento.trim() || 'Comunidad Universitaria',
-        matricula_o_numero_empleado: formRegistro.matricula_o_numero_empleado.trim() || undefined,
+        matricula_o_clave: formRegistro.matricula_o_numero_empleado.trim() || undefined,
       };
 
       const respuesta = await registro(datosParaEnviar);
@@ -247,12 +323,13 @@ const LoginPage = () => {
         setTimeout(() => {
           setModalRegistroAbierto(false);
           navigate('/dashboard');
-        }, 1200);
+        }, 1000);
       } else {
         setErrorRegistro(respuesta.mensaje || 'No se pudo completar el registro.');
       }
     } catch (err) {
-      const msj = err.response?.data?.mensaje ||
+      const msj =
+        err.response?.data?.mensaje ||
         err.response?.data?.errores?.[0]?.mensaje ||
         'Error al conectar con el servidor para el registro.';
       setErrorRegistro(msj);
@@ -273,8 +350,13 @@ const LoginPage = () => {
       {/* Barra superior flotante con Botón de Modo Oscuro/Claro */}
       <header className="login-top-bar">
         <div className="login-top-bar__brand">
-          <Shield className="login-top-bar__icon" size={24} />
-          <span className="login-top-bar__name">UTM Desk</span>
+          <div className="campus-sidebar__logo-badge">
+            <School size={20} className="text-white" />
+          </div>
+          <div className="flex flex-col">
+            <span className="campus-sidebar__title">campus</span>
+            <span className="campus-sidebar__subtitle">GESTIÓN DE INCIDENCIAS</span>
+          </div>
         </div>
         <div className="login-top-bar__actions">
           <ThemeToggle showLabel={true} />
@@ -286,15 +368,15 @@ const LoginPage = () => {
         {/* Cabecera Principal */}
         <section className="login-header-section">
           <div className="login-header-badge">
-            <Sparkles size={14} className="text-indigo-400" />
-            <span>Sistema NoSQL Cloud • Campus UTM</span>
+            <Sparkles size={14} className="text-emerald-600" />
+            <span>Mesa de Ayuda Universitaria • Campus UTM</span>
           </div>
 
           <h1 className="login-header-title">
             Portal de Acceso y Gestión de Incidencias
           </h1>
           <p className="login-header-subtitle">
-            Selecciona tu recuadro de usuario para ingresar instantáneamente con 1 clic o crea una nueva cuenta institucional.
+            Selecciona tu perfil institucional para ingresar con un clic o inicia sesión con tus credenciales.
           </p>
 
           {/* Barra de Acciones: Botón Crear Cuenta y Botón Modo Manual */}
@@ -341,10 +423,10 @@ const LoginPage = () => {
           <section className="manual-login-card mb-8">
             <div className="manual-login-card__header">
               <h2 className="text-sm font-semibold flex items-center gap-2">
-                <Lock size={16} className="text-indigo-400" />
-                Ingresar Credenciales Manualmente
+                <Lock size={16} className="text-emerald-600" />
+                Ingresar con Correo y Contraseña
               </h2>
-              <span className="text-xs text-muted">Para usuarios externos o administradores</span>
+              <span className="text-xs text-muted">Acceso seguro institucional</span>
             </div>
 
             <form onSubmit={handleSubmitManual} className="manual-login-form">
@@ -414,7 +496,7 @@ const LoginPage = () => {
           {/* Barra de Filtros por Categoría */}
           <div className="user-boxes-filters">
             <div className="user-boxes-filters__label">
-              <span>Perfiles autorizados:</span>
+              <span>Perfiles del campus:</span>
             </div>
             <div className="user-boxes-filters__tabs">
               <button
@@ -422,28 +504,28 @@ const LoginPage = () => {
                 className={`filter-tab ${filtroCategoria === 'todos' ? 'filter-tab--active' : ''}`}
                 onClick={() => setFiltroCategoria('todos')}
               >
-                Todos ({usuariosDirectos.length})
+                Todos ({todosLosPerfiles.length})
               </button>
               <button
                 type="button"
                 className={`filter-tab ${filtroCategoria === 'gestion' ? 'filter-tab--active' : ''}`}
                 onClick={() => setFiltroCategoria('gestion')}
               >
-                Directivos & Admin (3)
+                Directivos, Coord & Admin
               </button>
               <button
                 type="button"
                 className={`filter-tab ${filtroCategoria === 'tecnico' ? 'filter-tab--active' : ''}`}
                 onClick={() => setFiltroCategoria('tecnico')}
               >
-                Cuadrilla Técnica (2)
+                Cuadrilla Técnica
               </button>
               <button
                 type="button"
                 className={`filter-tab ${filtroCategoria === 'comunidad' ? 'filter-tab--active' : ''}`}
                 onClick={() => setFiltroCategoria('comunidad')}
               >
-                Docentes & Alumnos (2)
+                Reportantes (Docentes & Alumnos)
               </button>
             </div>
           </div>
@@ -457,19 +539,18 @@ const LoginPage = () => {
               return (
                 <div
                   key={u.id}
-                  onClick={() => !cargando && ingresarDirecto(u.correo, u.pass, u.nombre)}
+                  onClick={() => !cargando && ingresarDirecto(u)}
                   className={`user-box ${u.colorCard} ${estaIngresando ? 'user-box--loading' : ''}`}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      if (!cargando) ingresarDirecto(u.correo, u.pass, u.nombre);
+                      if (!cargando) ingresarDirecto(u);
                     }
                   }}
                   title={`Clic para ingresar como ${u.nombre}`}
                 >
-                  {/* Encabezado de la tarjeta: Avatar + Badge */}
                   <div className="user-box__top">
                     <div className={`user-box__avatar bg-gradient-to-br ${u.avatarGradient}`}>
                       <IconoRol size={20} className="text-white" />
@@ -477,12 +558,10 @@ const LoginPage = () => {
                     <span className="user-box__badge">{u.rolBadge}</span>
                   </div>
 
-                  {/* Información Principal: Nombre y Cargo */}
                   <div className="user-box__body">
                     <h2 className="user-box__name">{u.nombre}</h2>
                     <p className="user-box__role-title">{u.tituloRol}</p>
-                    
-                    {/* Recuadro de Correo con fondo diferenciado */}
+
                     <div className="user-box__email-pill">
                       <Mail size={13} className="shrink-0 text-muted" />
                       <span className="user-box__email-text">{u.correo}</span>
@@ -494,7 +573,6 @@ const LoginPage = () => {
                     </p>
                   </div>
 
-                  {/* Pie de la tarjeta con acción rápida */}
                   <div className="user-box__footer">
                     {estaIngresando ? (
                       <div className="user-box__loading-state">
@@ -517,17 +595,18 @@ const LoginPage = () => {
         {/* Footer institucional */}
         <footer className="login-footer">
           <p>
-            Universidad Tecnológica Metropolitana • Sistema NoSQL de Gestión de Incidencias
+            Universidad Tecnológica • Sistema NoSQL Cloud de Gestión de Incidencias
           </p>
           <span className="text-muted text-xs">Desarrollado por el equipo #5</span>
         </footer>
       </main>
 
-      {/* ═══════════════════════════════════════════════════════════════
-          MODAL: CREAR UNA CUENTA NUEVA (REGISTRO INSTITUCIONAL)
-          ═══════════════════════════════════════════════════════════════ */}
+      {/* Modal Crear Cuenta Nueva */}
       {modalRegistroAbierto && (
-        <div className="modal-overlay" onClick={() => !cargandoRegistro && setModalRegistroAbierto(false)}>
+        <div
+          className="modal-overlay"
+          onClick={() => !cargandoRegistro && setModalRegistroAbierto(false)}
+        >
           <div
             className="modal modal--registro"
             onClick={(e) => e.stopPropagation()}
@@ -536,13 +615,13 @@ const LoginPage = () => {
           >
             <div className="modal__header">
               <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-indigo-500/15 text-indigo-400">
+                <div className="p-2 rounded-lg bg-emerald-500/15 text-emerald-600">
                   <UserPlus size={20} />
                 </div>
                 <div>
                   <h2 className="modal__title">Crear Cuenta Institucional</h2>
                   <p className="text-xs text-muted">
-                    Regístrate para reportar y consultar el estatus de incidencias
+                    Registra tus datos para acceder a la mesa de ayuda del campus
                   </p>
                 </div>
               </div>
@@ -566,11 +645,13 @@ const LoginPage = () => {
 
             {exitoRegistro ? (
               <div className="modal__body text-center py-8">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
                   <CheckCircle2 size={36} />
                 </div>
-                <h3 className="text-lg font-bold text-slate-100">¡Cuenta Creada Exitosamente!</h3>
-                <p className="text-sm text-slate-400 mt-2">
+                <h3 className="text-lg font-bold text-[var(--color-text)]">
+                  ¡Cuenta Creada Exitosamente!
+                </h3>
+                <p className="text-sm text-[var(--color-text-muted)] mt-2">
                   Iniciando tu sesión y redirigiendo al dashboard...
                 </p>
                 <div className="loading-spinner mx-auto mt-4" />
@@ -612,9 +693,6 @@ const LoginPage = () => {
                         setFormRegistro({ ...formRegistro, correo: e.target.value })
                       }
                     />
-                    <span className="text-[11px] text-muted">
-                      Debe ser un correo válido institucional o personal.
-                    </span>
                   </div>
 
                   <div className="form-row">
